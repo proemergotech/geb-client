@@ -1,0 +1,11 @@
+hash: 6989e92c04e9f94ee0d9d291b56ba86e2a7dc1cde63e7c67f56d4ba5a01d4849
+updated: 2017-08-03T15:29:48.8348398+02:00
+imports:
+- name: github.com/pkg/errors
+  version: 645ef00459ed84a119197bfb8d8205042c6df63d
+- name: github.com/streadway/amqp
+  version: 2cbfe40c9341ad63ba23e53013b3ddc7989d801c
+- name: gitlab.com/proemergotech/re-error
+  version: 28d1a59a192df3cfa90f5aafdff1e25f417a485a
+  repo: git@gitlab.com:proemergotech/re-error.git
+testImports: []

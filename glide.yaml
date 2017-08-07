@@ -1,0 +1,9 @@
+package: gitlab.com/proemergotech/geb-client-go
+import:
+  - package: github.com/pkg/errors
+    version: ^0.8
+  - package: gitlab.com/proemergotech/re-error
+    repo:    git@gitlab.com:proemergotech/re-error.git
+    vsc:     git
+    version: ^0.1
+  - package: github.com/streadway/amqp
