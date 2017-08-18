@@ -18,3 +18,5 @@ import:
 ```
 
 ## Usage
+
+see (examples.go)[examples.go]

@@ -37,7 +37,6 @@ func main() {
             defer wg.Done()
             for time.Now().Before(until) {
                 publish(queue, eventName)
-                atomic.AddUint64(&publishCount, 1)
             }
         }()
     }
@@ -52,9 +51,6 @@ func main() {
 
     close(start)
 
-    wg.Wait()
-    log.Printf("All published")
-
     sigs := make(chan os.Signal, 1)
     done := make(chan bool, 1)
 
@@ -65,39 +61,44 @@ func main() {
         done <- true
     }()
 
+    go func() {
+        wg.Wait()
+        log.Printf("All published")
+    }()
+
     <-done
     log.Printf("publishCount :%v consumeCount: %v", publishCount, consumeCount)
 }
 
 func createQueue() *geb.Queue {
-    return geb.NewQueue("does_not_matter_for_publish", "service", "service", "192.168.188.87", 5672)
+    return geb.NewQueue("goTest", "service", "service", "192.168.33.33", 5672)
 }
 
 func publish(queue *geb.Queue, eventName string) {
     err := queue.Publish(eventName, []byte("test message"))
     if err != nil {
-        log.Printf("error: %+v", err)
+        time.Sleep(1 * time.Second)
+        log.Printf("error: %v", err)
+        return
     }
+
+    atomic.AddUint64(&publishCount, 1)
 }
 
 func consume(queue *geb.Queue, eventName string) {
-    var err error
-
-    queue = geb.NewQueue("goTest/consume", "service", "service", "192.168.188.87", 5672)
-
     queue.OnError(func(error *amqp.Error) {
-        time.Sleep(1 * time.Second)
-        log.Printf("connection error")
-        queue.Reconnect()
+        log.Printf("connection error %#v", error)
+
+        go func() {
+            time.Sleep(2 * time.Second)
+            queue.Reconnect()
+        }()
     })
-    err = queue.OnEvent(eventName, func(message []byte) (err error) {
+
+   queue.OnEvent(eventName, func(message []byte) (err error) {
         //log.Printf("here %v", string(message))
         atomic.AddUint64(&consumeCount, 1)
 
         return
     })
-
-    if err != nil {
-        log.Printf("Couldn't create channel: %+v", err)
-    }
 }
