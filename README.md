@@ -19,4 +19,4 @@ import:
 
 ## Usage
 
-see (examples.go)[examples.go]
+see [examples.go](examples.go)

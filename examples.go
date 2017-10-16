@@ -71,7 +71,7 @@ func main() {
 }
 
 func createQueue() *geb.Queue {
-    return geb.NewQueue("goTest", "service", "service", "192.168.33.33", 5672)
+    return geb.NewQueue("goTest", "service", "service", "10.0.75.1", 5672)
 }
 
 func publish(queue *geb.Queue, eventName string) {
