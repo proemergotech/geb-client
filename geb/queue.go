@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"net"
 	"time"
+	"encoding/json"
 )
 
 type Queue struct {
@@ -111,6 +112,15 @@ func (q *Queue) Publish(eventName string, message []byte) (err error) {
 	}
 
 	return
+}
+
+func (q *Queue) PublishStruct(eventName string, message interface{}) (err error) {
+	msg, err := json.Marshal(message)
+	if err != nil {
+		return errors.Wrapf(err, "geb.Queue.PublishStruct: json marshal failed for event: %v, with message type %T" + eventName, message)
+	}
+
+	return q.Publish(eventName, msg)
 }
 
 func (q *Queue) createPublishChannel() (publishCh chan *publishMessage, err error) {
