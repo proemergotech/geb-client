@@ -75,7 +75,7 @@ func createQueue() *geb.Queue {
 		"goTest",
 		"service",
 		"service",
-		"10.0.75.1",
+		"10.20.3.8",
 		5672,
 		geb.Timeout(5*time.Second),
 	)

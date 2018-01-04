@@ -1,16 +1,15 @@
 package geb
 
 import (
-	"github.com/streadway/amqp"
-	"fmt"
-	"gitlab.com/proemergotech/re-error/reerror"
-	"sync"
-	"log"
-	"github.com/pkg/errors"
-	"sync/atomic"
-	"net"
-	"time"
 	"encoding/json"
+	"fmt"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/pkg/errors"
+	"github.com/streadway/amqp"
 )
 
 type Queue struct {
@@ -42,7 +41,7 @@ type Queue struct {
 
 type handler struct {
 	isConnected bool
-	callback    func(message []byte) (error)
+	callback    func(message []byte) error
 }
 
 type publishMessage struct {
@@ -91,11 +90,10 @@ func NewQueue(consumerName string, userName string, password string, host string
 }
 
 func (q *Queue) Publish(eventName string, message []byte) (err error) {
-	rr := reerror.New(&err)
-	defer rr.Recover()
-
 	publishCh, err := q.createPublishChannel()
-	rr.Panic("Couldn't create publish channel")
+	if err != nil {
+		return errors.Wrap(err, "Couldn't create publish channel")
+	}
 
 	pubMes := &publishMessage{
 		eventName: eventName,
@@ -107,8 +105,7 @@ func (q *Queue) Publish(eventName string, message []byte) (err error) {
 
 	confirm := <-pubMes.confirm
 	if !confirm.Ack {
-		err = errors.New("Publish failed")
-		return
+		return errors.New("Publish failed")
 	}
 
 	return
@@ -117,7 +114,7 @@ func (q *Queue) Publish(eventName string, message []byte) (err error) {
 func (q *Queue) PublishStruct(eventName string, message interface{}) (err error) {
 	msg, err := json.Marshal(message)
 	if err != nil {
-		return errors.Wrapf(err, "geb.Queue.PublishStruct: json marshal failed for event: %v, with message type %T" + eventName, message)
+		return errors.Wrapf(err, "geb.Queue.PublishStruct: json marshal failed for event: %v, with message type %T"+eventName, message)
 	}
 
 	return q.Publish(eventName, msg)
@@ -146,18 +143,19 @@ func (q *Queue) createPublishChannel() (publishCh chan *publishMessage, err erro
 				}
 			}()
 
-			//log.Printf("publishcreate once")
-			rr := reerror.New(&q.publishChErr)
-			defer rr.Recover()
-
 			//log.Printf("creating publishMessage channel")
 			var conn *amqp.Connection
 			conn, q.publishChErr = q.connect()
-			rr.Panic("")
+			if q.publishChErr != nil {
+				return
+			}
 
 			var pubCh *amqp.Channel
 			pubCh, q.publishChErr = conn.Channel()
-			rr.Panic("Couldn't create publishMessage channel")
+			if q.publishChErr != nil {
+				q.publishChErr = errors.Wrap(err, "Couldn't create publishMessage channel")
+				return
+			}
 
 			publishConfirmers := make(chan chan amqp.Confirmation, maxPendingPublishes)
 			publishConfirm := pubCh.NotifyPublish(make(chan amqp.Confirmation))
@@ -199,7 +197,7 @@ func (q *Queue) closePublishChannel(lock bool) {
 	q.publishChExists = 0
 }
 
-func (q *Queue) OnEvent(eventName string, callback func(message []byte) (error)) {
+func (q *Queue) OnEvent(eventName string, callback func(message []byte) error) {
 	q.handlers[eventName] = &handler{
 		isConnected: false,
 		callback:    callback,
@@ -210,7 +208,6 @@ func (q *Queue) OnEvent(eventName string, callback func(message []byte) (error))
 
 func (q *Queue) startConsume() {
 	var err error
-	rr := reerror.New(&err)
 	defer func() {
 		if err != nil {
 			q.onError(&amqp.Error{
@@ -221,7 +218,6 @@ func (q *Queue) startConsume() {
 			})
 		}
 	}()
-	defer rr.Recover()
 
 	q.consumeChsMutex.Lock()
 	defer q.consumeChsMutex.Unlock()
@@ -233,7 +229,10 @@ func (q *Queue) startConsume() {
 
 		var deliveries <-chan amqp.Delivery
 		deliveries, err = q.createConsumeChannel(eventName)
-		rr.Panic("Couldn't create channel")
+		if err != nil {
+			err = errors.Wrap(err, "Couldn't create channel")
+			return
+		}
 
 		go q.handle(deliveries, handler.callback)
 
@@ -272,16 +271,16 @@ func (q *Queue) connect() (conn *amqp.Connection, err error) {
 
 			//log.Printf("connecting once")
 
-			rr := reerror.New(&q.connectionErr)
-			defer rr.Recover()
-
 			conn, q.connectionErr = amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", q.userName, q.password, q.host, q.port),
 				amqp.Config{
 					Heartbeat: q.Timeout / 2,
 					Locale:    "en_US",
 					Dial:      q.dial,
 				})
-			rr.Panic("Couldn't connect to rabbitmq server")
+			if q.connectionErr != nil {
+				q.connectionErr = errors.Wrap(err, "Couldn't connect to rabbitmq server")
+				return
+			}
 
 			closeCh := make(chan *amqp.Error)
 			conn.NotifyClose(closeCh)
@@ -309,21 +308,26 @@ func (q *Queue) closeConnection(lock bool) {
 }
 
 func (q *Queue) createConsumeChannel(eventName string) (deliveries <-chan amqp.Delivery, err error) {
-	rr := reerror.New(&err)
-	defer rr.Recover()
-
-	conn, err := q.connect();
-	rr.Panic("")
+	conn, err := q.connect()
+	if err != nil {
+		return nil, err
+	}
 
 	ch, err := conn.Channel()
-	rr.Panic("Couldn't create rabbitmq channel")
+	if err != nil {
+		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
+	}
 
 	queueName := fmt.Sprintf("%v/%v", q.consumerName, eventName)
 	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
-	rr.Panic("Couldn't create queue")
+	if err != nil {
+		return nil, errors.Wrap(err, "Couldn't create queue")
+	}
 
 	err = ch.QueueBind(queueName, eventName, exchangeName, false, nil)
-	rr.Panic("Couldn't bind queue")
+	if err != nil {
+		return nil, errors.Wrap(err, "Couldn't bind queue")
+	}
 
 	deliveries, err = ch.Consume(
 		queueName,
@@ -334,14 +338,14 @@ func (q *Queue) createConsumeChannel(eventName string) (deliveries <-chan amqp.D
 		false,
 		nil,
 	)
-	rr.Panic("Couldn't start consuming")
-
-	log.Printf("queue bound: %v", queueName)
+	if err != nil {
+		return nil, errors.Wrap(err, "Couldn't start consuming")
+	}
 
 	return
 }
 
-func (q *Queue) handle(deliveries <-chan amqp.Delivery, callback func(message []byte) (error)) {
+func (q *Queue) handle(deliveries <-chan amqp.Delivery, callback func(message []byte) error) {
 	//log.Printf("starting handling: %#v", deliveries)
 	for d := range deliveries {
 		//log.Printf("delivery: %v", d)
