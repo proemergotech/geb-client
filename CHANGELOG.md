@@ -1,6 +1,11 @@
 
 # Release Notes
 
+## 0.1.4 / 2018-01-04
+- removed reerror dependency
+- changed dependency manager from glide to dep
+- removed logging of bound queues (client should log them if needed)
+
 ## 0.1.3 / 2017-10-16
 - added PublishStruct convenience method
 
