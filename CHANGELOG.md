@@ -1,6 +1,9 @@
 
 # Release Notes
 
+# 0.1.6 / 2018-01-09
+- fixed fatal error: concurrent map iteration and map write
+
 # 0.1.5 / 2018-01-09
 - fixed a bug introduced in 0.1.4 which resulted in panic when rabbitmq server was unavailable
 

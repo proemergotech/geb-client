@@ -198,10 +198,12 @@ func (q *Queue) closePublishChannel(lock bool) {
 }
 
 func (q *Queue) OnEvent(eventName string, callback func(message []byte) error) {
+	q.consumeChsMutex.Lock()
 	q.handlers[eventName] = &handler{
 		isConnected: false,
 		callback:    callback,
 	}
+	q.consumeChsMutex.Unlock()
 
 	q.startConsume()
 }
