@@ -1,6 +1,9 @@
 
 # Release Notes
 
+# 0.1.5 / 2018-01-09
+- fixed a bug introduced in 0.1.4 which resulted in panic when rabbitmq server was unavailable
+
 ## 0.1.4 / 2018-01-04
 - removed reerror dependency
 - changed dependency manager from glide to dep

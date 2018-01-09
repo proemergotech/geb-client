@@ -246,51 +246,37 @@ func (q *Queue) OnError(callback func(error *amqp.Error)) {
 	q.onError = callback
 }
 
-func (q *Queue) connect() (conn *amqp.Connection, err error) {
+func (q *Queue) connect() (*amqp.Connection, error) {
 	//log.Printf("connecting")
-
-	conn, err = q.connection, q.connectionErr
 
 	if atomic.LoadUint32(&q.connectionExists) == 0 || q.connection == nil {
 		q.connectionMutex.Lock()
 		defer q.connectionMutex.Unlock()
 
-		defer func() {
-			conn, err = q.connection, q.connectionErr
-		}()
-
 		if atomic.LoadUint32(&q.connectionExists) == 0 {
-			q.connectionErr = nil
-			defer func() {
-				if q.connectionErr != nil {
-					q.closeConnection(false)
-				} else {
-					q.connectionExists = 1
-				}
-			}()
-
 			//log.Printf("connecting once")
 
-			conn, q.connectionErr = amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", q.userName, q.password, q.host, q.port),
+			q.connection, q.connectionErr = amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", q.userName, q.password, q.host, q.port),
 				amqp.Config{
 					Heartbeat: q.Timeout / 2,
 					Locale:    "en_US",
 					Dial:      q.dial,
 				})
 			if q.connectionErr != nil {
-				q.connectionErr = errors.Wrap(err, "Couldn't connect to rabbitmq server")
-				return
+				q.connectionErr = errors.Wrap(q.connectionErr, "Couldn't connect to rabbitmq server")
+				q.closeConnection(false)
+				return q.connection, q.connectionErr
 			}
 
-			closeCh := make(chan *amqp.Error)
-			conn.NotifyClose(closeCh)
-			q.handleClose(closeCh)
+			q.connectionExists = 1
 
-			q.connection = conn
+			closeCh := make(chan *amqp.Error)
+			q.connection.NotifyClose(closeCh)
+			q.handleClose(closeCh)
 		}
 	}
 
-	return
+	return q.connection, q.connectionErr
 }
 
 func (q *Queue) closeConnection(lock bool) {
