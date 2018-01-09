@@ -1,6 +1,9 @@
 
 # Release Notes
 
+# 0.1.5 / 2018-01-09
+- avoid panic when amqp connect returns nill connection and nil error
+
 ## 0.1.4 / 2018-01-04
 - removed reerror dependency
 - changed dependency manager from glide to dep

@@ -312,6 +312,9 @@ func (q *Queue) createConsumeChannel(eventName string) (deliveries <-chan amqp.D
 	if err != nil {
 		return nil, err
 	}
+	if conn == nil {
+		return nil, errors.New("Couldn't create rabbitmq channel")
+	}
 
 	ch, err := conn.Channel()
 	if err != nil {
