@@ -1,6 +1,12 @@
 
 # Release Notes
 
+# 0.2.0 / 2018-02-07
+**Breaking change!**
+- create an interface for the queue
+- move the original implementation to rabbitmq package and keep the interface in the geb package
+- unexport `Timeout` struct field from rabbitmq.Queue, it is set through an Option, so don't need to be exposed
+
 # 0.1.6 / 2018-01-09
 - fixed fatal error: concurrent map iteration and map write
 
