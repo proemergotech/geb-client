@@ -1,8 +1,6 @@
 package main
 
 import (
-	"gitlab.com/proemergotech/geb-client-go/geb"
-	"github.com/streadway/amqp"
 	"time"
 	"log"
 	"sync"
@@ -10,6 +8,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"gitlab.com/proemergotech/geb-client-go/geb/rabbitmq"
+	"gitlab.com/proemergotech/geb-client-go/geb"
 )
 
 var eventNames = []string{
@@ -63,38 +63,38 @@ func main() {
 
 	go func() {
 		wg.Wait()
-		log.Printf("All published")
+		log.Println("All published")
 	}()
 
 	<-done
-	log.Printf("publishCount :%v consumeCount: %v", publishCount, consumeCount)
+	log.Printf("publishCount :%v consumeCount: %v\n", publishCount, consumeCount)
 }
 
-func createQueue() *geb.Queue {
-	return geb.NewQueue(
+func createQueue() geb.Queue {
+	return rabbitmq.NewQueue(
 		"goTest",
 		"service",
 		"service",
 		"10.20.3.8",
 		5672,
-		geb.Timeout(5*time.Second),
+		rabbitmq.Timeout(5*time.Second),
 	)
 }
 
-func publish(queue *geb.Queue, eventName string) {
+func publish(queue geb.Queue, eventName string) {
 	err := queue.Publish(eventName, []byte("test message"))
 	if err != nil {
 		time.Sleep(1 * time.Second)
-		log.Printf("error: %v", err)
+		log.Printf("error: %v\n", err)
 		return
 	}
-
+	log.Printf("event: %s published\n", eventName)
 	atomic.AddUint64(&publishCount, 1)
 }
 
-func consume(queue *geb.Queue, eventName string) {
-	queue.OnError(func(error *amqp.Error) {
-		log.Printf("connection error %#v", error)
+func consume(queue geb.Queue, eventName string) {
+	queue.OnError(func(error error) {
+		log.Printf("connection error %#v\n", error)
 
 		go func() {
 			time.Sleep(2 * time.Second)
@@ -105,6 +105,7 @@ func consume(queue *geb.Queue, eventName string) {
 	queue.OnEvent(eventName, func(message []byte) (err error) {
 		//log.Printf("here %v", string(message))
 		atomic.AddUint64(&consumeCount, 1)
+		log.Printf("event: %s consumed\n", eventName)
 
 		return
 	})

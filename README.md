@@ -3,18 +3,16 @@
 ## Installation
 
 1. Use an ssh agent to allow git clone without any user input
-2. Add dependency to glide.yaml (see below)
-3. run glide update
+2. Add dependency to Gopkg.toml (see below)
+3. run dep ensure
 
-### glide.yaml
+### Gopkg.toml
 
-```yaml
-package: your-package
-import:
-  - package: gitlab.com/proemergotech/geb-client-go
-    repo:    git@gitlab.com:proemergotech/geb-client-go.git
-    vsc:     git
-    version: ^0.1
+```toml
+[[constraint]]
+  name = "gitlab.com/proemergotech/geb-client-go"
+  source = "git@gitlab.com:proemergotech/geb-client-go.git"
+  version = "0.1.6"
 ```
 
 ## Usage

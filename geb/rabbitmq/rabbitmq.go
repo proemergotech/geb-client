@@ -1,4 +1,4 @@
-package geb
+package rabbitmq
 
 import (
 	"encoding/json"
@@ -33,10 +33,10 @@ type Queue struct {
 
 	isClosing uint32
 
-	onError  func(error *amqp.Error)
+	onError  func(err error)
 	handlers map[string]*handler
 
-	Timeout time.Duration
+	timeout time.Duration
 }
 
 type handler struct {
@@ -76,10 +76,10 @@ func NewQueue(consumerName string, userName string, password string, host string
 		isClosing:       0,
 		consumeChsMutex: sync.Mutex{},
 
-		onError:  func(error *amqp.Error) {},
+		onError:  func(err error) {},
 		handlers: make(map[string]*handler),
 
-		Timeout: time.Second * 5,
+		timeout: time.Second * 5,
 	}
 
 	for _, option := range options {
@@ -244,7 +244,7 @@ func (q *Queue) startConsume() {
 	return
 }
 
-func (q *Queue) OnError(callback func(error *amqp.Error)) {
+func (q *Queue) OnError(callback func(err error)) {
 	q.onError = callback
 }
 
@@ -260,7 +260,7 @@ func (q *Queue) connect() (*amqp.Connection, error) {
 
 			q.connection, q.connectionErr = amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", q.userName, q.password, q.host, q.port),
 				amqp.Config{
-					Heartbeat: q.Timeout / 2,
+					Heartbeat: q.timeout / 2,
 					Locale:    "en_US",
 					Dial:      q.dial,
 				})
@@ -390,7 +390,7 @@ func (q *Queue) handleClose(errors <-chan *amqp.Error) {
 }
 
 func (q *Queue) dial(network, addr string) (net.Conn, error) {
-	conn, err := net.DialTimeout(network, addr, q.Timeout)
+	conn, err := net.DialTimeout(network, addr, q.timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +398,7 @@ func (q *Queue) dial(network, addr string) (net.Conn, error) {
 	// Heartbeating hasn't started yet, don't stall forever on a dead server.
 	// A deadline is set for TLS and AMQP handshaking. After AMQP is established,
 	// the deadline is cleared in openComplete.
-	if err := conn.SetDeadline(time.Now().Add(q.Timeout)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(q.timeout)); err != nil {
 		return nil, err
 	}
 
@@ -407,6 +407,6 @@ func (q *Queue) dial(network, addr string) (net.Conn, error) {
 
 func Timeout(duration time.Duration) Option {
 	return func(q *Queue) {
-		q.Timeout = duration
+		q.timeout = duration
 	}
 }
