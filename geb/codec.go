@@ -2,7 +2,7 @@ package geb
 
 import (
 	"github.com/pkg/errors"
-	"github.com/ugorji/go/codec"
+	ucodec "github.com/ugorji/go/codec"
 )
 
 type Codec interface {
@@ -11,14 +11,14 @@ type Codec interface {
 	Decode(data []byte) (Event, error)
 }
 
-type goCodec struct {
-	wrapperHandle codec.Handle
-	bodyHandle    codec.Handle
+type uCodec struct {
+	wrapperHandle ucodec.Handle
+	bodyHandle    ucodec.Handle
 }
 
-type goEvent struct {
-	handle     codec.Handle
-	Body       codec.Raw         `codec:"body"`
+type uEvent struct {
+	handle     ucodec.Handle
+	Body       ucodec.Raw        `codec:"body"`
 	HeadersMap map[string]string `codec:"headers"`
 }
 
@@ -26,53 +26,53 @@ type rawCodec struct{}
 
 type rawEvent []byte
 
-type GoOption func(*goSettings)
+type CodecOption func(*codecSettings)
 
-type goSettings struct {
+type codecSettings struct {
 	tags []string
 }
 
-func MsgpackCodec(opts ...GoOption) Codec {
-	gs := &goSettings{
+func MsgpackCodec(opts ...CodecOption) Codec {
+	gs := &codecSettings{
 		tags: []string{"json", "codec"},
 	}
 	for _, opt := range opts {
 		opt(gs)
 	}
 
-	wrapHandle := &codec.MsgpackHandle{}
-	wrapHandle.TypeInfos = codec.NewTypeInfos([]string{"codec"})
+	wrapHandle := &ucodec.MsgpackHandle{}
+	wrapHandle.TypeInfos = ucodec.NewTypeInfos([]string{"codec"})
 	wrapHandle.Raw = true
 
-	bodyHandle := &codec.MsgpackHandle{}
-	bodyHandle.TypeInfos = codec.NewTypeInfos(gs.tags)
+	bodyHandle := &ucodec.MsgpackHandle{}
+	bodyHandle.TypeInfos = ucodec.NewTypeInfos(gs.tags)
 
-	return &goCodec{
+	return &uCodec{
 		wrapperHandle: wrapHandle,
 		bodyHandle:    bodyHandle,
 	}
 }
 
-func JSONCodec(opts ...GoOption) Codec {
-	gs := &goSettings{
+func JSONCodec(opts ...CodecOption) Codec {
+	gs := &codecSettings{
 		tags: []string{"json", "codec"},
 	}
 	for _, opt := range opts {
 		opt(gs)
 	}
 
-	wrapHandle := &codec.JsonHandle{}
-	wrapHandle.TypeInfos = codec.NewTypeInfos([]string{"codec"})
+	wrapHandle := &ucodec.JsonHandle{}
+	wrapHandle.TypeInfos = ucodec.NewTypeInfos([]string{"codec"})
 	wrapHandle.Raw = true
 	wrapHandle.MapKeyAsString = true
 	wrapHandle.HTMLCharsAsIs = true
 
-	bodyHandle := &codec.JsonHandle{}
-	bodyHandle.TypeInfos = codec.NewTypeInfos(gs.tags)
+	bodyHandle := &ucodec.JsonHandle{}
+	bodyHandle.TypeInfos = ucodec.NewTypeInfos(gs.tags)
 	bodyHandle.MapKeyAsString = true
 	bodyHandle.HTMLCharsAsIs = true
 
-	return &goCodec{
+	return &uCodec{
 		wrapperHandle: wrapHandle,
 		bodyHandle:    bodyHandle,
 	}
@@ -82,31 +82,31 @@ func RawCodec() Codec {
 	return &rawCodec{}
 }
 
-func UseTags(tags ...string) GoOption {
-	return func(gs *goSettings) {
+func UseTags(tags ...string) CodecOption {
+	return func(gs *codecSettings) {
 		gs.tags = tags
 	}
 }
 
-func (c *goCodec) Name() string {
+func (c *uCodec) Name() string {
 	return c.wrapperHandle.Name()
 }
 
-func (c *goCodec) Encode(headers map[string]string, body interface{}) ([]byte, error) {
+func (c *uCodec) Encode(headers map[string]string, body interface{}) ([]byte, error) {
 	b := []byte(nil)
-	enc := codec.NewEncoderBytes(&b, c.bodyHandle)
+	enc := ucodec.NewEncoderBytes(&b, c.bodyHandle)
 	err := enc.Encode(body)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	e := goEvent{
+	e := uEvent{
 		HeadersMap: headers,
 		Body:       b,
 	}
 
 	b = []byte(nil)
-	enc = codec.NewEncoderBytes(&b, c.wrapperHandle)
+	enc = ucodec.NewEncoderBytes(&b, c.wrapperHandle)
 	err = enc.Encode(e)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -115,10 +115,10 @@ func (c *goCodec) Encode(headers map[string]string, body interface{}) ([]byte, e
 	return b, nil
 }
 
-func (c *goCodec) Decode(data []byte) (Event, error) {
-	e := &goEvent{handle: c.bodyHandle}
+func (c *uCodec) Decode(data []byte) (Event, error) {
+	e := &uEvent{handle: c.bodyHandle}
 
-	dec := codec.NewDecoderBytes(data, c.wrapperHandle)
+	dec := ucodec.NewDecoderBytes(data, c.wrapperHandle)
 	err := dec.Decode(e)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -127,12 +127,12 @@ func (c *goCodec) Decode(data []byte) (Event, error) {
 	return e, nil
 }
 
-func (e *goEvent) Headers() map[string]string {
+func (e *uEvent) Headers() map[string]string {
 	return e.HeadersMap
 }
 
-func (e *goEvent) Unmarshal(v interface{}) error {
-	dec := codec.NewDecoderBytes(e.Body, e.handle)
+func (e *uEvent) Unmarshal(v interface{}) error {
+	dec := ucodec.NewDecoderBytes(e.Body, e.handle)
 	err := dec.Decode(v)
 	if err != nil {
 		return errors.WithStack(err)

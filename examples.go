@@ -119,8 +119,8 @@ func main() {
 	//simple()
 	//return
 
-	queue := createQueue()
-	defer queue.Close()
+	publishQ := createQueue()
+	defer publishQ.Close()
 
 	var wg sync.WaitGroup
 	start := make(chan bool)
@@ -134,25 +134,30 @@ func main() {
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		t := tests[i%len(tests)]
-		go func() {
+		go func(q geb.Queue, t test) {
 			<-start
 			defer wg.Done()
 			for time.Now().Before(until) {
-				publish(queue, t)
+				publish(q, t)
 			}
-		}()
+		}(publishQ, t)
 	}
 
 	for i := 0; i < 2; i++ {
-		for _, t := range tests {
-			go func(t test) {
-				<-start
-				consume(queue, t)
-			}(t)
+		var consumeQ geb.Queue
+		if i == 0 {
+			consumeQ = publishQ
+		} else {
+			consumeQ = createQueue()
+			defer consumeQ.Close()
 		}
 
-		queue = createQueue()
-		defer queue.Close()
+		for _, t := range tests {
+			go func(q geb.Queue, t test) {
+				<-start
+				consume(q, t)
+			}(publishQ, t)
+		}
 	}
 
 	close(start)
