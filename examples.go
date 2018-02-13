@@ -156,7 +156,7 @@ func main() {
 			go func(q geb.Queue, t test) {
 				<-start
 				consume(q, t)
-			}(publishQ, t)
+			}(consumeQ, t)
 		}
 	}
 
