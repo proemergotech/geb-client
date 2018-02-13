@@ -1,7 +1,7 @@
 
 # Release Notes
 
-# 0.3.0 / 2018-02-12
+# 0.3.0 / 2018-02-13
 - added msgpack encoding
 - added headers/body separation to events
 
