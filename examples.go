@@ -23,19 +23,19 @@ type test struct {
 }
 
 type body struct {
-	Field1 string         `json:"field_1"`
-	Field2 map[int]string `json:"field_2"`
-	Field3 []float64      `json:"field_3"`
+	Field1 string         `json:"field_1" custom:"field_1"`
+	Field2 map[int]string `json:"field_2" custom:"field_2"`
+	Field3 []float64      `json:"field_3" custom:"field_3"`
 	bodyEmbedded
 }
 
 type bodyEmbedded struct {
-	Field4 string `json:"field_4"`
+	Field4 string `json:"field_4" custom:"field_4"`
 }
 
 var tests = []test{
 	{
-		codec:     geb.JSONCodec,
+		codec:     geb.JSONCodec(),
 		eventName: "goTest/json/v1",
 		headers: map[string]string{
 			"header": "value",
@@ -43,7 +43,7 @@ var tests = []test{
 		body: testBody,
 	},
 	{
-		codec:     geb.MsgpackCodec,
+		codec:     geb.MsgpackCodec(geb.UseTags("custom")),
 		eventName: "goTest/msgpack/v1",
 		headers: map[string]string{
 			"header": "value",
@@ -51,7 +51,7 @@ var tests = []test{
 		body: testBody,
 	},
 	{
-		codec:     geb.RawCodec,
+		codec:     geb.RawCodec(),
 		eventName: "goTest/raw/v1",
 		headers:   nil,
 		body:      []byte("raw test"),
@@ -88,10 +88,11 @@ func simple() {
 	defer queue.Close()
 
 	type dragon struct {
-		Color string `json:"field1"` // json or codec tag can be used
+		Color string `json:"color" mycustomtag:"color,omitempty"` // default tag names are "json" or "codec"
 	}
 
-	queue.OnEvent(geb.MsgpackCodec, "event/dragon/created/v1", func(event geb.Event) error {
+	// optionally: geb.MsgpackCodec(geb.UseTags("mycustomtag"))
+	queue.OnEvent(geb.MsgpackCodec(), "event/dragon/created/v1", func(event geb.Event) error {
 		d := dragon{}
 		err := event.Unmarshal(&d)
 		if err != nil {
@@ -106,7 +107,7 @@ func simple() {
 	d := dragon{
 		Color: "green",
 	}
-	err := queue.Publish(geb.MsgpackCodec, "event/dragon/created/v1", map[string]string{"x_dragon_heads": "3"}, d)
+	err := queue.Publish(geb.MsgpackCodec(), "event/dragon/created/v1", map[string]string{"x_dragon_heads": "3"}, d)
 	if err != nil {
 		log.Printf("You broke it! %+v", err)
 	}
@@ -124,11 +125,15 @@ func main() {
 	var wg sync.WaitGroup
 	start := make(chan bool)
 
+	for _, t := range tests {
+		consumeCounts[t.eventName] = new(uint64)
+		publishCounts[t.eventName] = new(uint64)
+	}
+
 	until := time.Now().Add(10 * time.Second)
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		t := tests[i%len(tests)]
-		publishCounts[t.eventName] = new(uint64)
 		go func() {
 			<-start
 			defer wg.Done()
@@ -138,13 +143,16 @@ func main() {
 		}()
 	}
 
-	for i := 0; i < 3; i++ {
-		t := tests[i%len(tests)]
-		consumeCounts[t.eventName] = new(uint64)
-		go func() {
-			<-start
-			consume(queue, t)
-		}()
+	for i := 0; i < 2; i++ {
+		for _, t := range tests {
+			go func(t test) {
+				<-start
+				consume(queue, t)
+			}(t)
+		}
+
+		queue = createQueue()
+		defer queue.Close()
 	}
 
 	close(start)
@@ -213,6 +221,7 @@ func consume(queue geb.Queue, t test) {
 
 		event.Unmarshal(body2Ptr.Interface())
 
+		//log.Printf("%#+v", t.eventName)
 		//log.Printf("%#+v", t.headers)
 		//log.Printf("%#+v", event.Headers())
 		//log.Printf("%#+v", t.body)

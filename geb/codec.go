@@ -26,35 +26,69 @@ type rawCodec struct{}
 
 type rawEvent []byte
 
-var (
-	MsgpackCodec = func() Codec {
-		wrapHandle := &codec.MsgpackHandle{}
-		wrapHandle.Raw = true
+type GoOption func(*goSettings)
 
-		return &goCodec{
-			wrapperHandle: wrapHandle,
-			bodyHandle:    &codec.MsgpackHandle{},
-		}
-	}()
-	JSONCodec = func() Codec {
-		wrapHandle := &codec.JsonHandle{}
-		wrapHandle.Raw = true
-		wrapHandle.MapKeyAsString = true
-		wrapHandle.HTMLCharsAsIs = true
+type goSettings struct {
+	tags []string
+}
 
-		bodyHandle := &codec.JsonHandle{}
-		bodyHandle.MapKeyAsString = true
-		bodyHandle.HTMLCharsAsIs = true
+func MsgpackCodec(opts ...GoOption) Codec {
+	gs := &goSettings{
+		tags: []string{"json", "codec"},
+	}
+	for _, opt := range opts {
+		opt(gs)
+	}
 
-		return &goCodec{
-			wrapperHandle: wrapHandle,
-			bodyHandle:    bodyHandle,
-		}
-	}()
-	RawCodec Codec = &rawCodec{}
-)
+	wrapHandle := &codec.MsgpackHandle{}
+	wrapHandle.TypeInfos = codec.NewTypeInfos([]string{"codec"})
+	wrapHandle.Raw = true
 
-func (c *goCodec) Name() (string) {
+	bodyHandle := &codec.MsgpackHandle{}
+	bodyHandle.TypeInfos = codec.NewTypeInfos(gs.tags)
+
+	return &goCodec{
+		wrapperHandle: wrapHandle,
+		bodyHandle:    bodyHandle,
+	}
+}
+
+func JSONCodec(opts ...GoOption) Codec {
+	gs := &goSettings{
+		tags: []string{"json", "codec"},
+	}
+	for _, opt := range opts {
+		opt(gs)
+	}
+
+	wrapHandle := &codec.JsonHandle{}
+	wrapHandle.TypeInfos = codec.NewTypeInfos([]string{"codec"})
+	wrapHandle.Raw = true
+	wrapHandle.MapKeyAsString = true
+	wrapHandle.HTMLCharsAsIs = true
+
+	bodyHandle := &codec.JsonHandle{}
+	bodyHandle.TypeInfos = codec.NewTypeInfos(gs.tags)
+	bodyHandle.MapKeyAsString = true
+	bodyHandle.HTMLCharsAsIs = true
+
+	return &goCodec{
+		wrapperHandle: wrapHandle,
+		bodyHandle:    bodyHandle,
+	}
+}
+
+func RawCodec() Codec {
+	return &rawCodec{}
+}
+
+func UseTags(tags ...string) GoOption {
+	return func(gs *goSettings) {
+		gs.tags = tags
+	}
+}
+
+func (c *goCodec) Name() string {
 	return c.wrapperHandle.Name()
 }
 
@@ -93,13 +127,13 @@ func (c *goCodec) Decode(data []byte) (Event, error) {
 	return e, nil
 }
 
-func (e goEvent) Headers() map[string]string {
+func (e *goEvent) Headers() map[string]string {
 	return e.HeadersMap
 }
 
-func (e goEvent) Unmarshal(v interface{}) error {
+func (e *goEvent) Unmarshal(v interface{}) error {
 	dec := codec.NewDecoderBytes(e.Body, e.handle)
-	err := dec.Decode(&v)
+	err := dec.Decode(v)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -107,7 +141,7 @@ func (e goEvent) Unmarshal(v interface{}) error {
 	return nil
 }
 
-func (c *rawCodec) Name() (string) {
+func (c *rawCodec) Name() string {
 	return "raw"
 }
 

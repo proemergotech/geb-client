@@ -29,10 +29,11 @@
 	defer queue.Close()
 
 	type dragon struct {
-		Color string `json:"field1"` // json or codec tag can be used
+		Color string `json:"color" mycustomtag:"color,omitempty"` // default tag names are "json" or "codec"
 	}
 
-	queue.OnEvent(geb.MsgpackCodec, "event/dragon/created/v1", func(event geb.Event) error {
+  // optionally: geb.MsgpackCodec(geb.UseTags("mycustomtag"))
+	queue.OnEvent(geb.MsgpackCodec(), "event/dragon/created/v1", func(event geb.Event) error {
 		d := dragon{}
 		err := event.Unmarshal(&d)
 		if err != nil {
@@ -47,7 +48,7 @@
 	d := dragon{
 		Color: "green",
 	}
-	err := queue.Publish(geb.MsgpackCodec, "event/dragon/created/v1", map[string]string{"x_dragon_heads": "3"}, d)
+	err := queue.Publish(geb.MsgpackCodec(), "event/dragon/created/v1", map[string]string{"x_dragon_heads": "3"}, d)
 	if err != nil {
 		log.Printf("You broke it! %+v", err)
 	}
