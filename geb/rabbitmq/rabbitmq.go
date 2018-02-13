@@ -1,7 +1,6 @@
 package rabbitmq
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
+	"gitlab.com/proemergotech/geb-client-go/geb"
 )
 
 type Queue struct {
@@ -41,7 +41,8 @@ type Queue struct {
 
 type handler struct {
 	isConnected bool
-	callback    func(message []byte) error
+	codec       geb.Codec
+	callback    func(event geb.Event) error
 }
 
 type publishMessage struct {
@@ -89,15 +90,20 @@ func NewQueue(consumerName string, userName string, password string, host string
 	return queue
 }
 
-func (q *Queue) Publish(eventName string, message []byte) (err error) {
+func (q *Queue) Publish(codec geb.Codec, eventName string, headers map[string]string, body interface{}) (err error) {
 	publishCh, err := q.createPublishChannel()
 	if err != nil {
 		return errors.Wrap(err, "Couldn't create publish channel")
 	}
 
+	msg, err := codec.Encode(headers, body)
+	if err != nil {
+		return errors.Wrap(err, "Encode failed during publish")
+	}
+
 	pubMes := &publishMessage{
 		eventName: eventName,
-		message:   message,
+		message:   msg,
 		confirm:   make(chan amqp.Confirmation),
 	}
 
@@ -109,15 +115,6 @@ func (q *Queue) Publish(eventName string, message []byte) (err error) {
 	}
 
 	return
-}
-
-func (q *Queue) PublishStruct(eventName string, message interface{}) (err error) {
-	msg, err := json.Marshal(message)
-	if err != nil {
-		return errors.Wrapf(err, "geb.Queue.PublishStruct: json marshal failed for event: %v, with message type %T"+eventName, message)
-	}
-
-	return q.Publish(eventName, msg)
 }
 
 func (q *Queue) createPublishChannel() (publishCh chan *publishMessage, err error) {
@@ -197,10 +194,11 @@ func (q *Queue) closePublishChannel(lock bool) {
 	q.publishChExists = 0
 }
 
-func (q *Queue) OnEvent(eventName string, callback func(message []byte) error) {
+func (q *Queue) OnEvent(codec geb.Codec, eventName string, callback func(event geb.Event) error) {
 	q.consumeChsMutex.Lock()
 	q.handlers[eventName] = &handler{
 		isConnected: false,
+		codec:       codec,
 		callback:    callback,
 	}
 	q.consumeChsMutex.Unlock()
@@ -236,7 +234,7 @@ func (q *Queue) startConsume() {
 			return
 		}
 
-		go q.handle(deliveries, handler.callback)
+		go q.handle(deliveries, handler)
 
 		handler.isConnected = true
 	}
@@ -333,11 +331,17 @@ func (q *Queue) createConsumeChannel(eventName string) (deliveries <-chan amqp.D
 	return
 }
 
-func (q *Queue) handle(deliveries <-chan amqp.Delivery, callback func(message []byte) error) {
+func (q *Queue) handle(deliveries <-chan amqp.Delivery, handler *handler) {
 	//log.Printf("starting handling: %#v", deliveries)
 	for d := range deliveries {
 		//log.Printf("delivery: %v", d)
-		err := callback(d.Body)
+		e, err := handler.codec.Decode(d.Body)
+		if err != nil {
+			q.onError(errors.Wrap(err, "Decode failed during OnEvent"))
+			continue
+		}
+
+		err = handler.callback(e)
 		if err != nil {
 			d.Nack(false, !d.Redelivered)
 		} else {
