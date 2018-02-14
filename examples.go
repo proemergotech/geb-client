@@ -75,16 +75,21 @@ var testBody = body{
 
 var publishCounts = make(map[string]*uint64, len(tests))
 var consumeCounts = make(map[string]*uint64, len(tests))
+var midConsCounts = make(map[string]*uint64, len(tests))
 
 func simple() {
-	var queue geb.Queue = rabbitmq.NewQueue(
-		"goTest",    // consumerName (application name)
-		"service",   // rabbitmq username
-		"service",   // rabbitmq password
-		"10.20.3.8", // rabbitmq host
-		5672,        // rabbitmq port
-		rabbitmq.Timeout(5*time.Second),
-	)
+	queue := &geb.Queue{
+		Handler: rabbitmq.NewHandler(
+			"goTest",    // consumerName (application name)
+			"service",   // rabbitmq username
+			"service",   // rabbitmq password
+			"10.20.3.8", // rabbitmq host
+			5672,        // rabbitmq port
+			rabbitmq.Timeout(5*time.Second),
+		),
+		Codec: geb.MsgpackCodec(),
+	}
+
 	defer queue.Close()
 
 	type dragon struct {
@@ -92,22 +97,27 @@ func simple() {
 	}
 
 	// optionally: geb.MsgpackCodec(geb.UseTags("mycustomtag"))
-	queue.OnEvent(geb.MsgpackCodec(), "event/dragon/created/v1", func(event geb.Event) error {
-		d := dragon{}
-		err := event.Unmarshal(&d)
-		if err != nil {
-			log.Printf("You broke it! %+v", err)
-			return nil
-		}
+	queue.OnEvent("event/dragon/created/v1").
+		Listen(func(event *geb.Event) error {
+			d := dragon{}
+			err := event.Unmarshal(&d)
+			if err != nil {
+				log.Printf("You broke it! %+v", err)
+				return nil
+			}
 
-		log.Printf("A mighty %v dragon with %v heads has been created!", d.Color, event.Headers()["x_dragon_heads"])
-		return nil
-	})
+			log.Printf("A mighty %v dragon with %v heads has been created!", d.Color, event.Headers()["x_dragon_heads"])
+			return nil
+		})
 
 	d := dragon{
 		Color: "green",
 	}
-	err := queue.Publish(geb.MsgpackCodec(), "event/dragon/created/v1", map[string]string{"x_dragon_heads": "3"}, d)
+	err := queue.Publish("event/dragon/created/v1").
+		Headers(map[string]string{"x_dragon_heads": "3"}).
+		Body(d).
+		Do()
+
 	if err != nil {
 		log.Printf("You broke it! %+v", err)
 	}
@@ -127,6 +137,7 @@ func main() {
 
 	for _, t := range tests {
 		consumeCounts[t.eventName] = new(uint64)
+		midConsCounts[t.eventName] = new(uint64)
 		publishCounts[t.eventName] = new(uint64)
 	}
 
@@ -134,7 +145,7 @@ func main() {
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		t := tests[i%len(tests)]
-		go func(q geb.Queue, t test) {
+		go func(q *geb.Queue, t test) {
 			<-start
 			defer wg.Done()
 			for time.Now().Before(until) {
@@ -144,7 +155,7 @@ func main() {
 	}
 
 	for i := 0; i < 2; i++ {
-		var consumeQ geb.Queue
+		var consumeQ *geb.Queue
 		if i == 0 {
 			consumeQ = publishQ
 		} else {
@@ -152,8 +163,14 @@ func main() {
 			defer consumeQ.Close()
 		}
 
+		consumeQ.UseOnEvent(func(e *geb.Event, next func(e *geb.Event) error) error {
+			atomic.AddUint64(midConsCounts[e.EventName()], 1)
+
+			return next(e)
+		})
+
 		for _, t := range tests {
-			go func(q geb.Queue, t test) {
+			go func(q *geb.Queue, t test) {
 				<-start
 				consume(q, t)
 			}(consumeQ, t)
@@ -181,24 +198,34 @@ func main() {
 
 	pc, _ := json.Marshal(publishCounts)
 	cc, _ := json.Marshal(consumeCounts)
+	mc, _ := json.Marshal(midConsCounts)
 
 	log.Printf("publishCounts :%v\n", string(pc))
 	log.Printf("consumeCounts :%v\n", string(cc))
+	log.Printf("midConsCounts :%v\n", string(mc))
 }
 
-func createQueue() geb.Queue {
-	return rabbitmq.NewQueue(
-		"goTest",
-		"service",
-		"service",
-		"10.20.3.8",
-		5672,
-		rabbitmq.Timeout(5*time.Second),
-	)
+func createQueue() *geb.Queue {
+	return &geb.Queue{
+		Handler: rabbitmq.NewHandler(
+			"goTest",
+			"service",
+			"service",
+			"10.20.3.8",
+			5672,
+			rabbitmq.Timeout(5*time.Second),
+		),
+		Codec: geb.MsgpackCodec(),
+	}
 }
 
-func publish(queue geb.Queue, t test) {
-	err := queue.Publish(t.codec, t.eventName, t.headers, t.body)
+func publish(queue *geb.Queue, t test) {
+	err := queue.Publish(t.eventName).
+		Codec(t.codec).
+		Headers(t.headers).
+		Body(t.body).
+		Do()
+
 	if err != nil {
 		time.Sleep(1 * time.Second)
 		log.Printf("error: %v\n", err)
@@ -211,7 +238,7 @@ func publish(queue geb.Queue, t test) {
 	//log.Printf("event: %s published\n", t.eventName)
 }
 
-func consume(queue geb.Queue, t test) {
+func consume(queue *geb.Queue, t test) {
 	queue.OnError(func(error error) {
 		log.Printf("connection error %+v\n", error)
 
@@ -221,30 +248,32 @@ func consume(queue geb.Queue, t test) {
 		}()
 	})
 
-	queue.OnEvent(t.codec, t.eventName, func(event geb.Event) (err error) {
-		body2Ptr := reflect.New(reflect.ValueOf(t.body).Type())
+	queue.OnEvent(t.eventName).
+		Codec(t.codec).
+		Listen(func(event *geb.Event) error {
+			body2Ptr := reflect.New(reflect.ValueOf(t.body).Type())
 
-		event.Unmarshal(body2Ptr.Interface())
+			event.Unmarshal(body2Ptr.Interface())
 
-		//log.Printf("%#+v", t.eventName)
-		//log.Printf("%#+v", t.headers)
-		//log.Printf("%#+v", event.Headers())
-		//log.Printf("%#+v", t.body)
-		//log.Printf("%#+v", reflect.Indirect(body2Ptr).Interface())
+			//log.Printf("%#+v", t.eventName)
+			//log.Printf("%#+v", t.headers)
+			//log.Printf("%#+v", event.Headers())
+			//log.Printf("%#+v", t.body)
+			//log.Printf("%#+v", reflect.Indirect(body2Ptr).Interface())
 
-		if !reflect.DeepEqual(t.headers, event.Headers()) {
-			log.Printf("headers mismatch for %v", t.codec.Name())
-		}
+			if !reflect.DeepEqual(t.headers, event.Headers()) {
+				log.Printf("headers mismatch for %v", t.codec.Name())
+			}
 
-		if !reflect.DeepEqual(t.body, reflect.Indirect(body2Ptr).Interface()) {
-			log.Printf("body mismatch for %v", t.codec.Name())
-		}
+			if !reflect.DeepEqual(t.body, reflect.Indirect(body2Ptr).Interface()) {
+				log.Printf("body mismatch for %v", t.codec.Name())
+			}
 
-		count := atomic.AddUint64(consumeCounts[t.eventName], 1)
-		if count%1000 == 0 {
-			log.Printf("event: %v consumed %v times\n", t.eventName, count)
-		}
+			count := atomic.AddUint64(consumeCounts[t.eventName], 1)
+			if count%1000 == 0 {
+				log.Printf("event: %v consumed %v times\n", t.eventName, count)
+			}
 
-		return
-	})
+			return nil
+		})
 }

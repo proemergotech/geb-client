@@ -1,6 +1,11 @@
 
 # Release Notes
 
+# 0.4.0 / 2018-02-14
+- added fluent interface for Publish & OnEvent
+- added context handling
+- added middleware support
+
 # 0.3.0 / 2018-02-13
 - added msgpack encoding
 - added headers/body separation to events

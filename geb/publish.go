@@ -1,0 +1,87 @@
+package geb
+
+import (
+	"context"
+)
+
+type Publish struct {
+	q          *Queue
+	codec      Codec
+	eventName  string
+	middleware func(*Event) error
+}
+
+func (q *Queue) Publish(eventName string) *Publish {
+	p := &Publish{
+		q:         q,
+		codec:     q.Codec,
+		eventName: eventName,
+	}
+
+	p.middleware = func(e *Event) error {
+		payload, err := p.codec.Encode(e.codecEvent)
+		if err != nil {
+			return err
+		}
+
+		return p.q.Handler.Publish(p.eventName, payload)
+	}
+
+	for _, m := range q.publishMiddlewares {
+		p.Use(m)
+	}
+
+	return p
+}
+
+func (p *Publish) Codec(codec Codec) *Publish {
+	p.codec = codec
+	return p
+}
+
+func (p *Publish) Use(m Middleware) *Publish {
+	old := p.middleware
+
+	p.middleware = func(e *Event) error {
+		return m(e, old)
+	}
+
+	return p
+}
+
+func (p *Publish) Headers(headers map[string]string) *Publish {
+	return p.Use(func(e *Event, next func(*Event) error) error {
+		e.SetHeaders(headers)
+
+		return next(e)
+	})
+}
+
+func (p *Publish) Body(v interface{}) *Publish {
+	return p.Use(func(e *Event, next func(*Event) error) error {
+		err := e.Marshal(v)
+		if err != nil {
+			return err
+		}
+
+		return next(e)
+	})
+}
+
+func (p *Publish) Context(ctx context.Context) *Publish {
+	return p.Use(func(e *Event, next func(*Event) error) error {
+		e.SetContext(ctx)
+
+		return next(e)
+	})
+}
+
+func (p *Publish) Do() error {
+	e := &Event{
+		eventName:  p.eventName,
+		codecEvent: p.codec.NewEvent(),
+		ctx:        context.Background(),
+	}
+
+	return p.middleware(e)
+}
