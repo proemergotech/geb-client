@@ -8,7 +8,7 @@ type Publish struct {
 	q          *Queue
 	codec      Codec
 	eventName  string
-	middleware func(*Event) error
+	middleware Callback
 }
 
 func (q *Queue) Publish(eventName string) *Publish {
@@ -40,12 +40,7 @@ func (p *Publish) Codec(codec Codec) *Publish {
 }
 
 func (p *Publish) Use(m Middleware) *Publish {
-	old := p.middleware
-
-	p.middleware = func(e *Event) error {
-		return m(e, old)
-	}
-
+	p.middleware = p.middleware.wrapWith(m)
 	return p
 }
 

@@ -166,7 +166,8 @@ func main() {
 		consumeQ.UseOnEvent(func(e *geb.Event, next func(e *geb.Event) error) error {
 			atomic.AddUint64(midConsCounts[e.EventName()], 1)
 
-			return next(e)
+			//return next(e)
+			return nil
 		})
 
 		for _, t := range tests {

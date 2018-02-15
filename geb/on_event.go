@@ -8,8 +8,8 @@ type OnEvent struct {
 	q          *Queue
 	codec      Codec
 	eventName  string
-	callback   func(*Event) error
-	middleware func(*Event) error
+	callback   Callback
+	middleware Callback
 }
 
 func (q *Queue) OnEvent(eventName string) *OnEvent {
@@ -36,17 +36,12 @@ func (oe *OnEvent) Codec(c Codec) *OnEvent {
 }
 
 func (oe *OnEvent) Use(m Middleware) *OnEvent {
-	old := oe.middleware
-
-	oe.middleware = func(e *Event) error {
-		return m(e, old)
-	}
-
+	oe.middleware = oe.middleware.wrapWith(m)
 	return oe
 }
 
-func (oe *OnEvent) Listen(callback func(*Event) error) {
-	oe.callback = callback
+func (oe *OnEvent) Listen(cb Callback) {
+	oe.callback = cb
 
 	oe.q.Handler.OnEvent(oe.eventName, func(payload []byte) error {
 		ce, err := oe.codec.Decode(payload)

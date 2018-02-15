@@ -14,8 +14,6 @@ type Handler interface {
 	Reconnect()
 }
 
-type Middleware func(e *Event, next func(*Event) error) error
-
 type Queue struct {
 	Handler            Handler
 	Codec              Codec
