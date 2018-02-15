@@ -1,9 +1,5 @@
 package geb
 
-import (
-	"context"
-)
-
 type Handler interface {
 	Close() error
 	OnError(callback func(err error))
@@ -15,24 +11,32 @@ type Handler interface {
 }
 
 type Queue struct {
-	Handler            Handler
-	Codec              Codec
+	handler            Handler
+	codec              Codec
 	onError            func(err error)
 	publishMiddlewares []Middleware
 	onEventMiddlewares []Middleware
 }
 
+func NewQueue(handler Handler, codec Codec) *Queue {
+	return &Queue{
+		handler: handler,
+		codec:   codec,
+		onError: func(err error) {},
+	}
+}
+
 func (q *Queue) OnError(callback func(err error)) {
 	q.onError = callback
-	q.Handler.OnError(callback)
+	q.handler.OnError(callback)
 }
 
 func (q *Queue) Close() error {
-	return q.Handler.Close()
+	return q.handler.Close()
 }
 
 func (q *Queue) Reconnect() {
-	q.Handler.Reconnect()
+	q.handler.Reconnect()
 }
 
 func (q *Queue) UsePublish(m Middleware) *Queue {
@@ -50,17 +54,17 @@ func (q *Queue) UseOnEvent(m Middleware) *Queue {
 type Event struct {
 	eventName string
 	codecEvent
-	ctx context.Context
+	ctx map[string]interface{}
 }
 
 func (e *Event) EventName() string {
 	return e.eventName
 }
 
-func (e *Event) Context() context.Context {
+func (e *Event) Context() map[string]interface{} {
 	return e.ctx
 }
 
-func (e *Event) SetContext(ctx context.Context) {
+func (e *Event) SetContext(ctx map[string]interface{}) {
 	e.ctx = ctx
 }

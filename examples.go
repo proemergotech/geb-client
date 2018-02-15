@@ -78,8 +78,8 @@ var consumeCounts = make(map[string]*uint64, len(tests))
 var midConsCounts = make(map[string]*uint64, len(tests))
 
 func simple() {
-	queue := &geb.Queue{
-		Handler: rabbitmq.NewHandler(
+	queue := geb.NewQueue(
+		rabbitmq.NewHandler(
 			"goTest",    // consumerName (application name)
 			"service",   // rabbitmq username
 			"service",   // rabbitmq password
@@ -87,8 +87,8 @@ func simple() {
 			5672,        // rabbitmq port
 			rabbitmq.Timeout(5*time.Second),
 		),
-		Codec: geb.MsgpackCodec(),
-	}
+		geb.MsgpackCodec(),
+	)
 
 	defer queue.Close()
 
@@ -96,7 +96,6 @@ func simple() {
 		Color string `json:"color" mycustomtag:"color,omitempty"` // default tag names are "json" or "codec"
 	}
 
-	// optionally: geb.MsgpackCodec(geb.UseTags("mycustomtag"))
 	queue.OnEvent("event/dragon/created/v1").
 		Listen(func(event *geb.Event) error {
 			d := dragon{}
@@ -166,8 +165,7 @@ func main() {
 		consumeQ.UseOnEvent(func(e *geb.Event, next func(e *geb.Event) error) error {
 			atomic.AddUint64(midConsCounts[e.EventName()], 1)
 
-			//return next(e)
-			return nil
+			return next(e)
 		})
 
 		for _, t := range tests {
@@ -207,8 +205,8 @@ func main() {
 }
 
 func createQueue() *geb.Queue {
-	return &geb.Queue{
-		Handler: rabbitmq.NewHandler(
+	return geb.NewQueue(
+		rabbitmq.NewHandler(
 			"goTest",
 			"service",
 			"service",
@@ -216,8 +214,8 @@ func createQueue() *geb.Queue {
 			5672,
 			rabbitmq.Timeout(5*time.Second),
 		),
-		Codec: geb.MsgpackCodec(),
-	}
+		geb.MsgpackCodec(),
+	)
 }
 
 func publish(queue *geb.Queue, t test) {

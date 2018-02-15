@@ -1,9 +1,5 @@
 package geb
 
-import (
-	"context"
-)
-
 type Publish struct {
 	q          *Queue
 	codec      Codec
@@ -14,7 +10,7 @@ type Publish struct {
 func (q *Queue) Publish(eventName string) *Publish {
 	p := &Publish{
 		q:         q,
-		codec:     q.Codec,
+		codec:     q.codec,
 		eventName: eventName,
 	}
 
@@ -24,7 +20,7 @@ func (q *Queue) Publish(eventName string) *Publish {
 			return err
 		}
 
-		return p.q.Handler.Publish(p.eventName, payload)
+		return p.q.handler.Publish(p.eventName, payload)
 	}
 
 	for _, m := range q.publishMiddlewares {
@@ -63,19 +59,11 @@ func (p *Publish) Body(v interface{}) *Publish {
 	})
 }
 
-func (p *Publish) Context(ctx context.Context) *Publish {
-	return p.Use(func(e *Event, next func(*Event) error) error {
-		e.SetContext(ctx)
-
-		return next(e)
-	})
-}
-
 func (p *Publish) Do() error {
 	e := &Event{
 		eventName:  p.eventName,
 		codecEvent: p.codec.NewEvent(),
-		ctx:        context.Background(),
+		ctx:        make(map[string]interface{}),
 	}
 
 	return p.middleware(e)

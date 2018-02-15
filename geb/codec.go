@@ -101,7 +101,10 @@ func (c *uCodec) Name() string {
 }
 
 func (c *uCodec) NewEvent() codecEvent {
-	return &uEvent{handle: c.bodyHandle}
+	return &uEvent{
+		handle:     c.bodyHandle,
+		HeadersMap: make(map[string]string),
+	}
 }
 
 func (c *uCodec) Encode(e codecEvent) ([]byte, error) {
@@ -109,7 +112,7 @@ func (c *uCodec) Encode(e codecEvent) ([]byte, error) {
 	enc := ucodec.NewEncoderBytes(&b, c.wrapperHandle)
 	err := enc.Encode(e)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrapf(err, "geb.codec.Encode: %v:", c.Name())
 	}
 
 	return b, nil
@@ -121,7 +124,7 @@ func (c *uCodec) Decode(data []byte) (codecEvent, error) {
 	dec := ucodec.NewDecoderBytes(data, c.wrapperHandle)
 	err := dec.Decode(e)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.Wrapf(err, "geb.codec.Decode: %v:", c.Name())
 	}
 
 	return e, nil
@@ -141,7 +144,7 @@ func (e *uEvent) Marshal(v interface{}) error {
 	enc := ucodec.NewEncoderBytes(&b, e.handle)
 	err := enc.Encode(v)
 	if err != nil {
-		return errors.WithStack(err)
+		return errors.Wrapf(err, "geb.codec.Marshal: %v:", e.handle.Name())
 	}
 	e.Body = b
 
@@ -150,13 +153,13 @@ func (e *uEvent) Marshal(v interface{}) error {
 
 func (e *uEvent) Unmarshal(v interface{}) error {
 	if e.Body == nil {
-		return errors.New("geb.codec.Unmarshal: tried to unmarshal nil body")
+		return errors.Errorf("geb.codec.Unmarshal: %v: tried to unmarshal nil body", e.handle.Name())
 	}
 
 	dec := ucodec.NewDecoderBytes(e.Body, e.handle)
 	err := dec.Decode(v)
 	if err != nil {
-		return errors.WithStack(err)
+		return errors.Wrapf(err, "geb.codec.Unmarshal: %v:", e.handle.Name())
 	}
 
 	return nil

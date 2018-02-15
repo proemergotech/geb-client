@@ -18,8 +18,8 @@
 ## Usage
 
 ```go
-	queue := &geb.Queue{
-		Handler: rabbitmq.NewHandler(
+	queue := geb.NewQueue(
+		rabbitmq.NewHandler(
 			"goTest",    // consumerName (application name)
 			"service",   // rabbitmq username
 			"service",   // rabbitmq password
@@ -27,8 +27,8 @@
 			5672,        // rabbitmq port
 			rabbitmq.Timeout(5*time.Second),
 		),
-		Codec: geb.MsgpackCodec(),
-	}
+		geb.MsgpackCodec(),
+	)
 
 	defer queue.Close()
 
@@ -36,7 +36,6 @@
 		Color string `json:"color" mycustomtag:"color,omitempty"` // default tag names are "json" or "codec"
 	}
 
-	// optionally: geb.MsgpackCodec(geb.UseTags("mycustomtag"))
 	queue.OnEvent("event/dragon/created/v1").
 		Listen(func(event *geb.Event) error {
 			d := dragon{}

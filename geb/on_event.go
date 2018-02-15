@@ -1,9 +1,5 @@
 package geb
 
-import (
-	"context"
-)
-
 type OnEvent struct {
 	q          *Queue
 	codec      Codec
@@ -15,7 +11,7 @@ type OnEvent struct {
 func (q *Queue) OnEvent(eventName string) *OnEvent {
 	oe := &OnEvent{
 		q:         q,
-		codec:     q.Codec,
+		codec:     q.codec,
 		eventName: eventName,
 	}
 
@@ -43,12 +39,10 @@ func (oe *OnEvent) Use(m Middleware) *OnEvent {
 func (oe *OnEvent) Listen(cb Callback) {
 	oe.callback = cb
 
-	oe.q.Handler.OnEvent(oe.eventName, func(payload []byte) error {
+	oe.q.handler.OnEvent(oe.eventName, func(payload []byte) error {
 		ce, err := oe.codec.Decode(payload)
 		if err != nil {
-			if oe.q.onError != nil {
-				oe.q.onError(err)
-			}
+			oe.q.onError(err)
 
 			return nil
 		}
@@ -56,7 +50,7 @@ func (oe *OnEvent) Listen(cb Callback) {
 		return oe.middleware(&Event{
 			eventName:  oe.eventName,
 			codecEvent: ce,
-			ctx:        context.Background(),
+			ctx:        make(map[string]interface{}),
 		})
 	})
 }
