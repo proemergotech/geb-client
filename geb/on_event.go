@@ -1,5 +1,7 @@
 package geb
 
+import "context"
+
 type OnEvent struct {
 	q          *Queue
 	codec      Codec
@@ -50,7 +52,7 @@ func (oe *OnEvent) Listen(cb Callback) {
 		return oe.middleware(&Event{
 			eventName:  oe.eventName,
 			codecEvent: ce,
-			ctx:        make(map[string]interface{}),
+			ctx:        context.Background(),
 		})
 	})
 }

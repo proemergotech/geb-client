@@ -1,5 +1,7 @@
 package geb
 
+import "context"
+
 type Publish struct {
 	q          *Queue
 	codec      Codec
@@ -63,7 +65,7 @@ func (p *Publish) Do() error {
 	e := &Event{
 		eventName:  p.eventName,
 		codecEvent: p.codec.NewEvent(),
-		ctx:        make(map[string]interface{}),
+		ctx:        context.Background(),
 	}
 
 	return p.middleware(e)

@@ -1,5 +1,7 @@
 package geb
 
+import "context"
+
 type Handler interface {
 	Close() error
 	OnError(callback func(err error))
@@ -54,17 +56,17 @@ func (q *Queue) UseOnEvent(m Middleware) *Queue {
 type Event struct {
 	eventName string
 	codecEvent
-	ctx map[string]interface{}
+	ctx context.Context
 }
 
 func (e *Event) EventName() string {
 	return e.eventName
 }
 
-func (e *Event) Context() map[string]interface{} {
+func (e *Event) Context() context.Context {
 	return e.ctx
 }
 
-func (e *Event) SetContext(ctx map[string]interface{}) {
+func (e *Event) SetContext(ctx context.Context) {
 	e.ctx = ctx
 }
