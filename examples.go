@@ -43,7 +43,7 @@ var tests = []test{
 		body: testBody,
 	},
 	{
-		codec:     geb.MsgpackCodec(geb.UseTags("custom")),
+		codec:     geb.JSONCodec(geb.UseTags("custom")),
 		eventName: "goTest/msgpack/v1",
 		headers: map[string]string{
 			"header": "value",
@@ -87,7 +87,7 @@ func simple() {
 			5672,        // rabbitmq port
 			rabbitmq.Timeout(5*time.Second),
 		),
-		geb.MsgpackCodec(),
+		geb.JSONCodec(),
 	)
 
 	defer queue.Close()
@@ -214,7 +214,7 @@ func createQueue() *geb.Queue {
 			5672,
 			rabbitmq.Timeout(5*time.Second),
 		),
-		geb.MsgpackCodec(),
+		geb.JSONCodec(),
 	)
 }
 

@@ -15,7 +15,6 @@ type Handler interface {
 type Queue struct {
 	handler            Handler
 	codec              Codec
-	onError            func(err error)
 	publishMiddlewares []Middleware
 	onEventMiddlewares []Middleware
 }
@@ -24,12 +23,10 @@ func NewQueue(handler Handler, codec Codec) *Queue {
 	return &Queue{
 		handler: handler,
 		codec:   codec,
-		onError: func(err error) {},
 	}
 }
 
 func (q *Queue) OnError(callback func(err error)) {
-	q.onError = callback
 	q.handler.OnError(callback)
 }
 

@@ -1,6 +1,12 @@
 package geb
 
-import "context"
+import (
+	"context"
+)
+
+type errCodecEvent struct {
+	err error
+}
 
 type OnEvent struct {
 	q          *Queue
@@ -43,10 +49,16 @@ func (oe *OnEvent) Listen(cb Callback) {
 
 	oe.q.handler.OnEvent(oe.eventName, func(payload []byte) error {
 		ce, err := oe.codec.Decode(payload)
-		if err != nil {
-			oe.q.onError(err)
 
-			return nil
+		if err != nil {
+			return oe.middleware(
+				&Event{
+					eventName: oe.eventName,
+					codecEvent: &errCodecEvent{
+						err: err,
+					},
+				},
+			)
 		}
 
 		return oe.middleware(&Event{
@@ -55,4 +67,20 @@ func (oe *OnEvent) Listen(cb Callback) {
 			ctx:        context.Background(),
 		})
 	})
+}
+
+func (*errCodecEvent) Headers() map[string]string {
+	return map[string]string{}
+}
+
+func (*errCodecEvent) SetHeaders(map[string]string) {
+	return
+}
+
+func (ece *errCodecEvent) Unmarshal(v interface{}) error {
+	return ece.err
+}
+
+func (ece *errCodecEvent) Marshal(v interface{}) error {
+	return ece.err
 }

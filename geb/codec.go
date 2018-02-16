@@ -40,27 +40,6 @@ type codecSettings struct {
 	tags []string
 }
 
-func MsgpackCodec(opts ...CodecOption) Codec {
-	gs := &codecSettings{
-		tags: []string{"json", "codec"},
-	}
-	for _, opt := range opts {
-		opt(gs)
-	}
-
-	wrapHandle := &ucodec.MsgpackHandle{}
-	wrapHandle.TypeInfos = ucodec.NewTypeInfos([]string{"codec"})
-	wrapHandle.Raw = true
-
-	bodyHandle := &ucodec.MsgpackHandle{}
-	bodyHandle.TypeInfos = ucodec.NewTypeInfos(gs.tags)
-
-	return &uCodec{
-		wrapperHandle: wrapHandle,
-		bodyHandle:    bodyHandle,
-	}
-}
-
 func JSONCodec(opts ...CodecOption) Codec {
 	gs := &codecSettings{
 		tags: []string{"json", "codec"},
@@ -112,7 +91,7 @@ func (c *uCodec) Encode(e codecEvent) ([]byte, error) {
 	enc := ucodec.NewEncoderBytes(&b, c.wrapperHandle)
 	err := enc.Encode(e)
 	if err != nil {
-		return nil, errors.Wrapf(err, "geb.codec.Encode: %v:", c.Name())
+		return nil, errors.Wrapf(err, "geb.codec.Encode: %v", c.Name())
 	}
 
 	return b, nil
@@ -124,7 +103,7 @@ func (c *uCodec) Decode(data []byte) (codecEvent, error) {
 	dec := ucodec.NewDecoderBytes(data, c.wrapperHandle)
 	err := dec.Decode(e)
 	if err != nil {
-		return nil, errors.Wrapf(err, "geb.codec.Decode: %v:", c.Name())
+		return nil, errors.Wrapf(err, "geb.codec.Decode: %v", c.Name())
 	}
 
 	return e, nil
@@ -144,7 +123,7 @@ func (e *uEvent) Marshal(v interface{}) error {
 	enc := ucodec.NewEncoderBytes(&b, e.handle)
 	err := enc.Encode(v)
 	if err != nil {
-		return errors.Wrapf(err, "geb.codec.Marshal: %v:", e.handle.Name())
+		return errors.Wrapf(err, "geb.codec.Marshal: %v", e.handle.Name())
 	}
 	e.Body = b
 
@@ -159,7 +138,7 @@ func (e *uEvent) Unmarshal(v interface{}) error {
 	dec := ucodec.NewDecoderBytes(e.Body, e.handle)
 	err := dec.Decode(v)
 	if err != nil {
-		return errors.Wrapf(err, "geb.codec.Unmarshal: %v:", e.handle.Name())
+		return errors.Wrapf(err, "geb.codec.Unmarshal: %v", e.handle.Name())
 	}
 
 	return nil
