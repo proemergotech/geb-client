@@ -1,7 +1,7 @@
 
 # Release Notes
 
-# 0.4.0 / 2018-02-14
+# 0.4.0 / 2018-02-16
 - added fluent interface for Publish & OnEvent
 - added context handling
 - added middleware support
