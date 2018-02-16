@@ -9,10 +9,9 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
-	"gitlab.com/proemergotech/geb-client-go/geb"
 )
 
-type Queue struct {
+type Handler struct {
 	consumerName string
 	userName     string
 	password     string
@@ -41,8 +40,7 @@ type Queue struct {
 
 type handler struct {
 	isConnected bool
-	codec       geb.Codec
-	callback    func(event geb.Event) error
+	callback    func([]byte) error
 }
 
 type publishMessage struct {
@@ -51,13 +49,13 @@ type publishMessage struct {
 	confirm   chan amqp.Confirmation
 }
 
-type Option func(q *Queue)
+type Option func(q *Handler)
 
 const exchangeName = "events"
 const maxPendingPublishes = 100
 
-func NewQueue(consumerName string, userName string, password string, host string, port int, options ...Option) *Queue {
-	queue := &Queue{
+func NewHandler(consumerName string, userName string, password string, host string, port int, options ...Option) *Handler {
+	h := &Handler{
 		consumerName: consumerName,
 		userName:     userName,
 		password:     password,
@@ -84,26 +82,21 @@ func NewQueue(consumerName string, userName string, password string, host string
 	}
 
 	for _, option := range options {
-		option(queue)
+		option(h)
 	}
 
-	return queue
+	return h
 }
 
-func (q *Queue) Publish(codec geb.Codec, eventName string, headers map[string]string, body interface{}) (err error) {
-	publishCh, err := q.createPublishChannel()
+func (h *Handler) Publish(eventName string, payload []byte) (err error) {
+	publishCh, err := h.createPublishChannel()
 	if err != nil {
 		return errors.Wrap(err, "Couldn't create publish channel")
 	}
 
-	msg, err := codec.Encode(headers, body)
-	if err != nil {
-		return errors.Wrap(err, "Encode failed during publish")
-	}
-
 	pubMes := &publishMessage{
 		eventName: eventName,
-		message:   msg,
+		message:   payload,
 		confirm:   make(chan amqp.Confirmation),
 	}
 
@@ -117,40 +110,40 @@ func (q *Queue) Publish(codec geb.Codec, eventName string, headers map[string]st
 	return
 }
 
-func (q *Queue) createPublishChannel() (publishCh chan *publishMessage, err error) {
+func (h *Handler) createPublishChannel() (publishCh chan *publishMessage, err error) {
 	//log.Printf("publishcreate")
 
-	publishCh, err = q.publishCh, q.publishChErr
+	publishCh, err = h.publishCh, h.publishChErr
 
-	if atomic.LoadUint32(&q.publishChExists) == 0 || q.publishCh == nil {
-		q.publishChMutex.Lock()
-		defer q.publishChMutex.Unlock()
+	if atomic.LoadUint32(&h.publishChExists) == 0 || h.publishCh == nil {
+		h.publishChMutex.Lock()
+		defer h.publishChMutex.Unlock()
 
 		defer func() {
-			publishCh, err = q.publishCh, q.publishChErr
+			publishCh, err = h.publishCh, h.publishChErr
 		}()
 
-		if q.publishChExists == 0 {
-			q.publishChErr = nil
+		if h.publishChExists == 0 {
+			h.publishChErr = nil
 			defer func() {
-				if q.publishChErr != nil {
-					q.closePublishChannel(false)
+				if h.publishChErr != nil {
+					h.closePublishChannel(false)
 				} else {
-					q.publishChExists = 1
+					h.publishChExists = 1
 				}
 			}()
 
 			//log.Printf("creating publishMessage channel")
 			var conn *amqp.Connection
-			conn, q.publishChErr = q.connect()
-			if q.publishChErr != nil {
+			conn, h.publishChErr = h.connect()
+			if h.publishChErr != nil {
 				return
 			}
 
 			var pubCh *amqp.Channel
-			pubCh, q.publishChErr = conn.Channel()
-			if q.publishChErr != nil {
-				q.publishChErr = errors.Wrap(err, "Couldn't create publishMessage channel")
+			pubCh, h.publishChErr = conn.Channel()
+			if h.publishChErr != nil {
+				h.publishChErr = errors.Wrap(err, "Couldn't create publishMessage channel")
 				return
 			}
 
@@ -162,9 +155,9 @@ func (q *Queue) createPublishChannel() (publishCh chan *publishMessage, err erro
 				}
 			}()
 
-			q.publishCh = make(chan *publishMessage)
+			h.publishCh = make(chan *publishMessage)
 			go func() {
-				for pubMes := range q.publishCh {
+				for pubMes := range h.publishCh {
 					publishConfirmers <- pubMes.confirm
 
 					pubCh.Publish(exchangeName, pubMes.eventName, false, false, amqp.Publishing{
@@ -180,37 +173,36 @@ func (q *Queue) createPublishChannel() (publishCh chan *publishMessage, err erro
 	return
 }
 
-func (q *Queue) closePublishChannel(lock bool) {
+func (h *Handler) closePublishChannel(lock bool) {
 	if lock {
-		q.publishChMutex.Lock()
-		defer q.publishChMutex.Unlock()
+		h.publishChMutex.Lock()
+		defer h.publishChMutex.Unlock()
 	}
 
-	if q.publishCh != nil {
-		close(q.publishCh)
-		q.publishCh = nil
+	if h.publishCh != nil {
+		close(h.publishCh)
+		h.publishCh = nil
 	}
 
-	q.publishChExists = 0
+	h.publishChExists = 0
 }
 
-func (q *Queue) OnEvent(codec geb.Codec, eventName string, callback func(event geb.Event) error) {
-	q.consumeChsMutex.Lock()
-	q.handlers[eventName] = &handler{
+func (h *Handler) OnEvent(eventName string, callback func([]byte) error) {
+	h.consumeChsMutex.Lock()
+	h.handlers[eventName] = &handler{
 		isConnected: false,
-		codec:       codec,
 		callback:    callback,
 	}
-	q.consumeChsMutex.Unlock()
+	h.consumeChsMutex.Unlock()
 
-	q.startConsume()
+	h.startConsume()
 }
 
-func (q *Queue) startConsume() {
+func (h *Handler) startConsume() {
 	var err error
 	defer func() {
 		if err != nil {
-			q.onError(&amqp.Error{
+			h.onError(&amqp.Error{
 				Code:    -1,
 				Reason:  fmt.Sprintf("%v", err),
 				Server:  false,
@@ -219,22 +211,22 @@ func (q *Queue) startConsume() {
 		}
 	}()
 
-	q.consumeChsMutex.Lock()
-	defer q.consumeChsMutex.Unlock()
+	h.consumeChsMutex.Lock()
+	defer h.consumeChsMutex.Unlock()
 
-	for eventName, handler := range q.handlers {
+	for eventName, handler := range h.handlers {
 		if handler.isConnected {
 			continue
 		}
 
 		var deliveries <-chan amqp.Delivery
-		deliveries, err = q.createConsumeChannel(eventName)
+		deliveries, err = h.createConsumeChannel(eventName)
 		if err != nil {
 			err = errors.Wrap(err, "Couldn't create channel")
 			return
 		}
 
-		go q.handle(deliveries, handler)
+		go h.handle(deliveries, handler)
 
 		handler.isConnected = true
 	}
@@ -242,59 +234,59 @@ func (q *Queue) startConsume() {
 	return
 }
 
-func (q *Queue) OnError(callback func(err error)) {
-	q.onError = callback
+func (h *Handler) OnError(callback func(err error)) {
+	h.onError = callback
 }
 
-func (q *Queue) connect() (*amqp.Connection, error) {
+func (h *Handler) connect() (*amqp.Connection, error) {
 	//log.Printf("connecting")
 
-	if atomic.LoadUint32(&q.connectionExists) == 0 || q.connection == nil {
-		q.connectionMutex.Lock()
-		defer q.connectionMutex.Unlock()
+	if atomic.LoadUint32(&h.connectionExists) == 0 || h.connection == nil {
+		h.connectionMutex.Lock()
+		defer h.connectionMutex.Unlock()
 
-		if atomic.LoadUint32(&q.connectionExists) == 0 {
+		if atomic.LoadUint32(&h.connectionExists) == 0 {
 			//log.Printf("connecting once")
 
-			q.connection, q.connectionErr = amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", q.userName, q.password, q.host, q.port),
+			h.connection, h.connectionErr = amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", h.userName, h.password, h.host, h.port),
 				amqp.Config{
-					Heartbeat: q.timeout / 2,
+					Heartbeat: h.timeout / 2,
 					Locale:    "en_US",
-					Dial:      q.dial,
+					Dial:      h.dial,
 				})
-			if q.connectionErr != nil {
-				q.connectionErr = errors.Wrap(q.connectionErr, "Couldn't connect to rabbitmq server")
-				q.closeConnection(false)
-				return q.connection, q.connectionErr
+			if h.connectionErr != nil {
+				h.connectionErr = errors.Wrap(h.connectionErr, "Couldn't connect to rabbitmq server")
+				h.closeConnection(false)
+				return h.connection, h.connectionErr
 			}
 
-			q.connectionExists = 1
+			h.connectionExists = 1
 
 			closeCh := make(chan *amqp.Error)
-			q.connection.NotifyClose(closeCh)
-			q.handleClose(closeCh)
+			h.connection.NotifyClose(closeCh)
+			h.handleClose(closeCh)
 		}
 	}
 
-	return q.connection, q.connectionErr
+	return h.connection, h.connectionErr
 }
 
-func (q *Queue) closeConnection(lock bool) {
+func (h *Handler) closeConnection(lock bool) {
 	if lock {
-		q.connectionMutex.Lock()
-		defer q.connectionMutex.Unlock()
+		h.connectionMutex.Lock()
+		defer h.connectionMutex.Unlock()
 	}
 
-	if q.connection != nil {
-		q.connection.Close()
-		q.connection = nil
+	if h.connection != nil {
+		h.connection.Close()
+		h.connection = nil
 	}
 
-	q.connectionExists = 0
+	h.connectionExists = 0
 }
 
-func (q *Queue) createConsumeChannel(eventName string) (deliveries <-chan amqp.Delivery, err error) {
-	conn, err := q.connect()
+func (h *Handler) createConsumeChannel(eventName string) (deliveries <-chan amqp.Delivery, err error) {
+	conn, err := h.connect()
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +296,7 @@ func (q *Queue) createConsumeChannel(eventName string) (deliveries <-chan amqp.D
 		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
 	}
 
-	queueName := fmt.Sprintf("%v/%v", q.consumerName, eventName)
+	queueName := fmt.Sprintf("%v/%v", h.consumerName, eventName)
 	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "Couldn't create queue")
@@ -331,17 +323,11 @@ func (q *Queue) createConsumeChannel(eventName string) (deliveries <-chan amqp.D
 	return
 }
 
-func (q *Queue) handle(deliveries <-chan amqp.Delivery, handler *handler) {
+func (h *Handler) handle(deliveries <-chan amqp.Delivery, handler *handler) {
 	//log.Printf("starting handling: %#v", deliveries)
 	for d := range deliveries {
 		//log.Printf("delivery: %v", d)
-		e, err := handler.codec.Decode(d.Body)
-		if err != nil {
-			q.onError(errors.Wrap(err, "Decode failed during OnEvent"))
-			continue
-		}
-
-		err = handler.callback(e)
+		err := handler.callback(d.Body)
 		if err != nil {
 			d.Nack(false, !d.Redelivered)
 		} else {
@@ -350,51 +336,51 @@ func (q *Queue) handle(deliveries <-chan amqp.Delivery, handler *handler) {
 	}
 }
 
-func (q *Queue) Close() (err error) {
+func (h *Handler) Close() (err error) {
 	//log.Printf("closing")
 
-	atomic.StoreUint32(&q.isClosing, 1)
+	atomic.StoreUint32(&h.isClosing, 1)
 	defer func() {
-		atomic.StoreUint32(&q.isClosing, 0)
+		atomic.StoreUint32(&h.isClosing, 0)
 	}()
 
-	q.consumeChsMutex.Lock()
-	for _, handler := range q.handlers {
+	h.consumeChsMutex.Lock()
+	for _, handler := range h.handlers {
 		handler.isConnected = false
 	}
-	q.consumeChsMutex.Unlock()
+	h.consumeChsMutex.Unlock()
 
-	q.closeConnection(true)
-	q.closePublishChannel(true)
+	h.closeConnection(true)
+	h.closePublishChannel(true)
 
 	//log.Printf("closing end")
 	return
 }
 
-func (q *Queue) Reconnect() {
+func (h *Handler) Reconnect() {
 	//log.Printf("reconnecting")
 
-	q.startConsume()
+	h.startConsume()
 }
 
-func (q *Queue) handleClose(errors <-chan *amqp.Error) {
+func (h *Handler) handleClose(errors <-chan *amqp.Error) {
 	go func() {
 		for err := range errors {
-			if atomic.LoadUint32(&q.isClosing) == 1 {
+			if atomic.LoadUint32(&h.isClosing) == 1 {
 				continue
 			}
 
-			q.Close()
+			h.Close()
 
-			if q.onError != nil {
-				q.onError(err)
+			if h.onError != nil {
+				h.onError(err)
 			}
 		}
 	}()
 }
 
-func (q *Queue) dial(network, addr string) (net.Conn, error) {
-	conn, err := net.DialTimeout(network, addr, q.timeout)
+func (h *Handler) dial(network, addr string) (net.Conn, error) {
+	conn, err := net.DialTimeout(network, addr, h.timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +388,7 @@ func (q *Queue) dial(network, addr string) (net.Conn, error) {
 	// Heartbeating hasn't started yet, don't stall forever on a dead server.
 	// A deadline is set for TLS and AMQP handshaking. After AMQP is established,
 	// the deadline is cleared in openComplete.
-	if err := conn.SetDeadline(time.Now().Add(q.timeout)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(h.timeout)); err != nil {
 		return nil, err
 	}
 
@@ -410,7 +396,7 @@ func (q *Queue) dial(network, addr string) (net.Conn, error) {
 }
 
 func Timeout(duration time.Duration) Option {
-	return func(q *Queue) {
+	return func(q *Handler) {
 		q.timeout = duration
 	}
 }
