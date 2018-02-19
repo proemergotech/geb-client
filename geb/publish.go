@@ -7,6 +7,7 @@ type Publish struct {
 	codec      Codec
 	eventName  string
 	middleware Callback
+	ctx        context.Context
 }
 
 func (q *Queue) Publish(eventName string) *Publish {
@@ -14,6 +15,7 @@ func (q *Queue) Publish(eventName string) *Publish {
 		q:         q,
 		codec:     q.codec,
 		eventName: eventName,
+		ctx:       context.Background(),
 	}
 
 	p.middleware = func(e *Event) error {
@@ -34,6 +36,11 @@ func (q *Queue) Publish(eventName string) *Publish {
 
 func (p *Publish) Codec(codec Codec) *Publish {
 	p.codec = codec
+	return p
+}
+
+func (p *Publish) Context(ctx context.Context) *Publish {
+	p.ctx = ctx
 	return p
 }
 
@@ -65,7 +72,7 @@ func (p *Publish) Do() error {
 	e := &Event{
 		eventName:  p.eventName,
 		codecEvent: p.codec.NewEvent(),
-		ctx:        context.Background(),
+		ctx:        p.ctx,
 	}
 
 	return p.middleware(e)
