@@ -1,6 +1,9 @@
 
 # Release Notes
 
+# 0.4.1 / 2018-02-19
+- added option to set publish context
+
 # 0.4.0 / 2018-02-16
 - added fluent interface for Publish & OnEvent
 - added context handling
