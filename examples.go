@@ -210,7 +210,7 @@ func createQueue() *geb.Queue {
 			"goTest",
 			"service",
 			"service",
-			"10.20.3.8",
+			"cloud-dev",
 			5672,
 			rabbitmq.Timeout(5*time.Second),
 		),
@@ -247,7 +247,7 @@ func consume(queue *geb.Queue, t test) {
 		}()
 	})
 
-	queue.OnEvent(t.eventName).
+	queue.OnEvent(t.eventName, geb.MaxGoroutines(1000)).
 		Codec(t.codec).
 		Listen(func(event *geb.Event) error {
 			body2Ptr := reflect.New(reflect.ValueOf(t.body).Type())

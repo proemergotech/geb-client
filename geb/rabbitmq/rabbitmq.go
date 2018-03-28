@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
+	"gitlab.com/proemergotech/geb-client-go/geb"
 )
 
 type Handler struct {
@@ -41,6 +42,7 @@ type Handler struct {
 type handler struct {
 	isConnected bool
 	callback    func([]byte) error
+	options     geb.OnEventOptions
 }
 
 type publishMessage struct {
@@ -187,11 +189,12 @@ func (h *Handler) closePublishChannel(lock bool) {
 	h.publishChExists = 0
 }
 
-func (h *Handler) OnEvent(eventName string, callback func([]byte) error) {
+func (h *Handler) OnEvent(eventName string, callback func([]byte) error, options geb.OnEventOptions) {
 	h.consumeChsMutex.Lock()
 	h.handlers[eventName] = &handler{
 		isConnected: false,
 		callback:    callback,
+		options:     options,
 	}
 	h.consumeChsMutex.Unlock()
 
@@ -220,7 +223,7 @@ func (h *Handler) startConsume() {
 		}
 
 		var deliveries <-chan amqp.Delivery
-		deliveries, err = h.createConsumeChannel(eventName)
+		deliveries, err = h.createConsumeChannel(eventName, handler.options)
 		if err != nil {
 			err = errors.Wrap(err, "Couldn't create channel")
 			return
@@ -285,7 +288,7 @@ func (h *Handler) closeConnection(lock bool) {
 	h.connectionExists = 0
 }
 
-func (h *Handler) createConsumeChannel(eventName string) (deliveries <-chan amqp.Delivery, err error) {
+func (h *Handler) createConsumeChannel(eventName string, options geb.OnEventOptions) (deliveries <-chan amqp.Delivery, err error) {
 	conn, err := h.connect()
 	if err != nil {
 		return nil, err
@@ -295,6 +298,8 @@ func (h *Handler) createConsumeChannel(eventName string) (deliveries <-chan amqp
 	if err != nil {
 		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
 	}
+
+	ch.Qos(options.MaxGoroutines, 0, false)
 
 	queueName := fmt.Sprintf("%v/%v", h.consumerName, eventName)
 	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
@@ -327,12 +332,15 @@ func (h *Handler) handle(deliveries <-chan amqp.Delivery, handler *handler) {
 	//log.Printf("starting handling: %#v", deliveries)
 	for d := range deliveries {
 		//log.Printf("delivery: %v", d)
-		err := handler.callback(d.Body)
-		if err != nil {
-			d.Nack(false, !d.Redelivered)
-		} else {
-			d.Ack(false)
-		}
+		go func(d amqp.Delivery) {
+			err := handler.callback(d.Body)
+
+			if err != nil {
+				d.Nack(false, !d.Redelivered)
+			} else {
+				d.Ack(false)
+			}
+		}(d)
 	}
 }
 

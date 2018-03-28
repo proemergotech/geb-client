@@ -4,8 +4,14 @@ import (
 	"context"
 )
 
+type OnEventOption func(oe *OnEventOptions)
+
 type errCodecEvent struct {
 	err error
+}
+
+type OnEventOptions struct {
+	MaxGoroutines int
 }
 
 type OnEvent struct {
@@ -14,13 +20,19 @@ type OnEvent struct {
 	eventName  string
 	callback   Callback
 	middleware Callback
+	options    OnEventOptions
 }
 
-func (q *Queue) OnEvent(eventName string) *OnEvent {
+func (q *Queue) OnEvent(eventName string, options ...OnEventOption) *OnEvent {
 	oe := &OnEvent{
 		q:         q,
 		codec:     q.codec,
 		eventName: eventName,
+		options:   OnEventOptions{MaxGoroutines: 1},
+	}
+
+	for _, option := range options {
+		option(&oe.options)
 	}
 
 	oe.middleware = func(e *Event) error {
@@ -66,7 +78,7 @@ func (oe *OnEvent) Listen(cb Callback) {
 			codecEvent: ce,
 			ctx:        context.Background(),
 		})
-	})
+	}, oe.options)
 }
 
 func (*errCodecEvent) Headers() map[string]string {
@@ -83,4 +95,10 @@ func (ece *errCodecEvent) Unmarshal(v interface{}) error {
 
 func (ece *errCodecEvent) Marshal(v interface{}) error {
 	return ece.err
+}
+
+func MaxGoroutines(maxGoroutines int) OnEventOption {
+	return func(o *OnEventOptions) {
+		o.MaxGoroutines = maxGoroutines
+	}
 }
