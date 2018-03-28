@@ -1,5 +1,8 @@
-
 # Release Notes
+
+# 0.5.0 / 2018-03-28
+- during OnEvent, deliver messages on a new goroutines until "MaxGoroutines" limit reached, the default value is 1
+- add "MaxGoroutines" option to OnEvent
 
 # 0.4.1 / 2018-02-19
 - added option to set publish context
