@@ -8,9 +8,10 @@
   version = "v0.8.0"
 
 [[projects]]
+  branch = "master"
   name = "github.com/streadway/amqp"
   packages = ["."]
-  revision = "7db842394ca79f338f781d47bc59115f44adb20b"
+  revision = "8e4aba63da9fc5571e01c6a45dc809a58cbc5a68"
 
 [[projects]]
   name = "github.com/ugorji/go"

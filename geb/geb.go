@@ -6,7 +6,7 @@ type Handler interface {
 	Close() error
 	OnError(callback func(err error))
 	// OnEvent for msgpack and json codecs, either 'codec' or 'json' tags may be used
-	OnEvent(eventName string, callback func(payload []byte) error)
+	OnEvent(eventName string, callback func(payload []byte) error, options OnEventOptions)
 	// Publish for msgpack and json codecs, either 'codec' or 'json' tags may be used
 	Publish(eventName string, payload []byte) (err error)
 	Reconnect()
