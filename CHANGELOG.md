@@ -1,5 +1,9 @@
 # Release Notes
 
+# 0.5.1 / 2018-04-03
+- error handling fixes
+- inline documentation
+
 # 0.5.0 / 2018-03-28
 - during OnEvent, deliver messages on a new goroutines until "MaxGoroutines" limit reached, the default value is 1
 - add "MaxGoroutines" option to OnEvent

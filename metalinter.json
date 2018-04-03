@@ -1,0 +1,26 @@
+{
+  "Vendor": true,
+  "Exclude": [
+    "should have comment",
+    "(S1013)"
+  ],
+  "Skip": [
+    "examples.go"
+  ],
+  "Sort": ["path", "line"],
+  "Deadline": "300s",
+  "Enable": [
+    "megacheck",
+    "deadcode",
+    "errcheck",
+    "gas",
+    "goconst",
+    "gofmt",
+    "goimports",
+    "golint",
+    "structcheck",
+    "varcheck",
+    "vet",
+    "vetshadow"
+  ]
+}

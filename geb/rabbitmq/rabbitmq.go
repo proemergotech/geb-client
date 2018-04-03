@@ -48,7 +48,7 @@ type handler struct {
 type publishMessage struct {
 	eventName string
 	message   []byte
-	confirm   chan amqp.Confirmation
+	confirm   chan confirmation
 }
 
 type Option func(q *Handler)
@@ -56,6 +56,13 @@ type Option func(q *Handler)
 const exchangeName = "events"
 const maxPendingPublishes = 100
 
+type confirmation struct {
+	amqp.Confirmation
+	err error
+}
+
+// NewHandler creates a rabbitmq based geb handler. Every eventName for OnEvent will result
+// in a separate rabbitmq queue. Registering multiple OnEvent callbacks for a single eventName is not supported.
 func NewHandler(consumerName string, userName string, password string, host string, port int, options ...Option) *Handler {
 	h := &Handler{
 		consumerName: consumerName,
@@ -99,12 +106,16 @@ func (h *Handler) Publish(eventName string, payload []byte) (err error) {
 	pubMes := &publishMessage{
 		eventName: eventName,
 		message:   payload,
-		confirm:   make(chan amqp.Confirmation),
+		confirm:   make(chan confirmation),
 	}
 
 	publishCh <- pubMes
 
 	confirm := <-pubMes.confirm
+	if confirm.err != nil {
+		return confirm.err
+	}
+
 	if !confirm.Ack {
 		return errors.New("Publish failed")
 	}
@@ -149,26 +160,32 @@ func (h *Handler) createPublishChannel() (publishCh chan *publishMessage, err er
 				return
 			}
 
-			publishConfirmers := make(chan chan amqp.Confirmation, maxPendingPublishes)
+			publishConfirmers := make(chan chan confirmation, maxPendingPublishes)
 			publishConfirm := pubCh.NotifyPublish(make(chan amqp.Confirmation))
 			go func() {
 				for confirmer := range publishConfirmers {
-					confirmer <- <-publishConfirm
+					confirmer <- confirmation{Confirmation: <-publishConfirm}
 				}
 			}()
 
 			h.publishCh = make(chan *publishMessage)
 			go func() {
 				for pubMes := range h.publishCh {
-					publishConfirmers <- pubMes.confirm
-
-					pubCh.Publish(exchangeName, pubMes.eventName, false, false, amqp.Publishing{
+					err := pubCh.Publish(exchangeName, pubMes.eventName, false, false, amqp.Publishing{
 						Body: pubMes.message,
 					})
+					if err != nil {
+						pubMes.confirm <- confirmation{err: err}
+					} else {
+						publishConfirmers <- pubMes.confirm
+					}
 				}
 			}()
 
-			pubCh.Confirm(false)
+			h.publishChErr = pubCh.Confirm(false)
+			if h.publishChErr != nil {
+				return
+			}
 		}
 	}
 
@@ -233,8 +250,6 @@ func (h *Handler) startConsume() {
 
 		handler.isConnected = true
 	}
-
-	return
 }
 
 func (h *Handler) OnError(callback func(err error)) {
@@ -274,18 +289,21 @@ func (h *Handler) connect() (*amqp.Connection, error) {
 	return h.connection, h.connectionErr
 }
 
-func (h *Handler) closeConnection(lock bool) {
+func (h *Handler) closeConnection(lock bool) error {
 	if lock {
 		h.connectionMutex.Lock()
 		defer h.connectionMutex.Unlock()
 	}
 
+	var err error
 	if h.connection != nil {
-		h.connection.Close()
+		err = h.connection.Close()
 		h.connection = nil
 	}
 
 	h.connectionExists = 0
+
+	return err
 }
 
 func (h *Handler) createConsumeChannel(eventName string, options geb.OnEventOptions) (deliveries <-chan amqp.Delivery, err error) {
@@ -299,7 +317,10 @@ func (h *Handler) createConsumeChannel(eventName string, options geb.OnEventOpti
 		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
 	}
 
-	ch.Qos(options.MaxGoroutines, 0, false)
+	err = ch.Qos(options.MaxGoroutines, 0, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
+	}
 
 	queueName := fmt.Sprintf("%v/%v", h.consumerName, eventName)
 	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
@@ -358,11 +379,11 @@ func (h *Handler) Close() (err error) {
 	}
 	h.consumeChsMutex.Unlock()
 
-	h.closeConnection(true)
 	h.closePublishChannel(true)
+	err = h.closeConnection(true)
 
 	//log.Printf("closing end")
-	return
+	return err
 }
 
 func (h *Handler) Reconnect() {

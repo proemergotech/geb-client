@@ -210,7 +210,7 @@ func createQueue() *geb.Queue {
 			"goTest",
 			"service",
 			"service",
-			"cloud-dev",
+			"10.20.3.8",
 			5672,
 			rabbitmq.Timeout(5*time.Second),
 		),
