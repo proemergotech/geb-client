@@ -5,11 +5,11 @@ import (
 	ucodec "github.com/ugorji/go/codec"
 )
 
-// Codec is an interface for marshalling/unmarshalling event body and headers.
+// Codec is an interface for marshaling/unmarshaling event body and headers.
 type Codec interface {
 	// Name returns the name of the encoder, for debugging purposes.
 	Name() string
-	// NewEvent returns an empty event that can be marhalled into. Also used internally, the specific codecs can set the body of their own codecEvent implementations.
+	// NewEvent returns an empty event that can be marshalled into.
 	NewEvent() codecEvent
 	// Encode marshals the event into a byte stream.
 	Encode(codecEvent) ([]byte, error)
@@ -49,7 +49,7 @@ type codecSettings struct {
 	tags []string
 }
 
-// JSONCodec returns a codec that marshalls both headers and body into a json object.
+// JSONCodec returns a codec that marshals both headers and body into a json object.
 func JSONCodec(opts ...CodecOption) Codec {
 	gs := &codecSettings{
 		tags: []string{"json", "codec"},
@@ -80,7 +80,7 @@ func RawCodec() Codec {
 	return &rawCodec{}
 }
 
-// UseTags option can be used to change the default struct tags for marshalling/unmarshalling.
+// UseTags option can be used to change the default struct tags for marshaling/unmarshaling.
 // If more than one tag is specified, they will be used in order of declaration.
 // eg: If you specify both "json" and "codec" tags, and a struct field has both `json="my_field", codec="your_field"`,
 // than my_field will be used.

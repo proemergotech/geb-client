@@ -1,7 +1,6 @@
 package geb
 
-// Callback is signature for the callback method passed to OnEvent. Also used internally to represent the outer layer
-// of the middleware stack.
+// Callback is signature for the callback method passed to OnEvent.
 type Callback func(*Event) error
 
 // Middleware is the signature of middlewares.

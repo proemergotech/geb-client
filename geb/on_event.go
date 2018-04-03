@@ -105,7 +105,7 @@ func (ece *errCodecEvent) Marshal(v interface{}) error {
 	return ece.err
 }
 
-// MaxGoroutines sets the maximum number of concurrent OnEvent callbacks for the given eventName.
+// MaxGoroutines sets the maximum number of concurrent OnEvent callbacks for a given eventName. Default is 1.
 func MaxGoroutines(maxGoroutines int) OnEventOption {
 	return func(o *OnEventOptions) {
 		o.MaxGoroutines = maxGoroutines

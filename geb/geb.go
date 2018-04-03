@@ -7,7 +7,7 @@ type Handler interface {
 	// Close can be called to gracefully close the queue. No new events will be processed,
 	// but existing event processings will continue. Publishing on a closed handler will return with an error.
 	Close() error
-	// OnError callback is called when a non-event specific (not a marshalling/unmarshalling) error occurs.
+	// OnError callback is called when a non-event specific (not a marshaling/unmarshaling) error occurs.
 	// eg: connection error
 	OnError(callback func(err error))
 	// OnEvent for msgpack and json codecs, either 'codec' or 'json' tags may be used
@@ -33,7 +33,7 @@ func NewQueue(handler Handler, codec Codec) *Queue {
 	}
 }
 
-// OnError callback is called when a non-event specific (not a marshalling/unmarshalling) error occurs.
+// OnError callback is called when a non-event specific (not a marshaling/unmarshaling) error occurs.
 // eg: connection error
 func (q *Queue) OnError(callback func(err error)) {
 	q.handler.OnError(callback)
