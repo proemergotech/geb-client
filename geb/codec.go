@@ -5,17 +5,26 @@ import (
 	ucodec "github.com/ugorji/go/codec"
 )
 
+// Codec is an interface for marshaling/unmarshaling event body and headers.
 type Codec interface {
+	// Name returns the name of the encoder, for debugging purposes.
 	Name() string
+	// NewEvent returns an empty event that can be marshalled into.
 	NewEvent() codecEvent
+	// Encode marshals the event into a byte stream.
 	Encode(codecEvent) ([]byte, error)
+	// Decode unmarhals a byte stream into a codecEvent.
 	Decode(data []byte) (codecEvent, error)
 }
 
 type codecEvent interface {
+	// Headers returns the event metadata.
 	Headers() map[string]string
+	// SetHeaders can be used to set metadata for the event.
 	SetHeaders(map[string]string)
+	// Unmarhal the event's body into the given argument v. V must be a non-nil pointer.
 	Unmarshal(v interface{}) error
+	// Marshal the given argument into the event's body.
 	Marshal(v interface{}) error
 }
 
@@ -40,6 +49,7 @@ type codecSettings struct {
 	tags []string
 }
 
+// JSONCodec returns a codec that marshals both headers and body into a json object.
 func JSONCodec(opts ...CodecOption) Codec {
 	gs := &codecSettings{
 		tags: []string{"json", "codec"},
@@ -65,10 +75,15 @@ func JSONCodec(opts ...CodecOption) Codec {
 	}
 }
 
+// RawCodec does not support headers, it simply sends the body as-is.
 func RawCodec() Codec {
 	return &rawCodec{}
 }
 
+// UseTags option can be used to change the default struct tags for marshaling/unmarshaling.
+// If more than one tag is specified, they will be used in order of declaration.
+// eg: If you specify both "json" and "codec" tags, and a struct field has both `json="my_field", codec="your_field"`,
+// than my_field will be used.
 func UseTags(tags ...string) CodecOption {
 	return func(gs *codecSettings) {
 		gs.tags = tags
@@ -111,7 +126,6 @@ func (c *uCodec) Decode(data []byte) (codecEvent, error) {
 
 func (e *uEvent) SetHeaders(h map[string]string) {
 	e.HeadersMap = h
-	return
 }
 
 func (e *uEvent) Headers() map[string]string {
@@ -169,7 +183,6 @@ func (*rawCodec) Decode(data []byte) (codecEvent, error) {
 }
 
 func (*rawEvent) SetHeaders(map[string]string) {
-	return
 }
 
 func (*rawEvent) Headers() map[string]string {

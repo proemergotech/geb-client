@@ -12,6 +12,8 @@ import (
 	"gitlab.com/proemergotech/geb-client-go/geb"
 )
 
+const extraPrefetch = 20
+
 type Handler struct {
 	consumerName string
 	userName     string
@@ -48,7 +50,7 @@ type handler struct {
 type publishMessage struct {
 	eventName string
 	message   []byte
-	confirm   chan amqp.Confirmation
+	confirm   chan confirmation
 }
 
 type Option func(q *Handler)
@@ -56,6 +58,13 @@ type Option func(q *Handler)
 const exchangeName = "events"
 const maxPendingPublishes = 100
 
+type confirmation struct {
+	amqp.Confirmation
+	err error
+}
+
+// NewHandler creates a rabbitmq based geb handler. Every eventName for OnEvent will result
+// in a separate rabbitmq queue. Registering multiple OnEvent callbacks for a single eventName is not supported.
 func NewHandler(consumerName string, userName string, password string, host string, port int, options ...Option) *Handler {
 	h := &Handler{
 		consumerName: consumerName,
@@ -99,12 +108,16 @@ func (h *Handler) Publish(eventName string, payload []byte) (err error) {
 	pubMes := &publishMessage{
 		eventName: eventName,
 		message:   payload,
-		confirm:   make(chan amqp.Confirmation),
+		confirm:   make(chan confirmation),
 	}
 
 	publishCh <- pubMes
 
 	confirm := <-pubMes.confirm
+	if confirm.err != nil {
+		return confirm.err
+	}
+
 	if !confirm.Ack {
 		return errors.New("Publish failed")
 	}
@@ -113,8 +126,6 @@ func (h *Handler) Publish(eventName string, payload []byte) (err error) {
 }
 
 func (h *Handler) createPublishChannel() (publishCh chan *publishMessage, err error) {
-	//log.Printf("publishcreate")
-
 	publishCh, err = h.publishCh, h.publishChErr
 
 	if atomic.LoadUint32(&h.publishChExists) == 0 || h.publishCh == nil {
@@ -135,7 +146,6 @@ func (h *Handler) createPublishChannel() (publishCh chan *publishMessage, err er
 				}
 			}()
 
-			//log.Printf("creating publishMessage channel")
 			var conn *amqp.Connection
 			conn, h.publishChErr = h.connect()
 			if h.publishChErr != nil {
@@ -149,26 +159,32 @@ func (h *Handler) createPublishChannel() (publishCh chan *publishMessage, err er
 				return
 			}
 
-			publishConfirmers := make(chan chan amqp.Confirmation, maxPendingPublishes)
+			publishConfirmers := make(chan chan confirmation, maxPendingPublishes)
 			publishConfirm := pubCh.NotifyPublish(make(chan amqp.Confirmation))
 			go func() {
 				for confirmer := range publishConfirmers {
-					confirmer <- <-publishConfirm
+					confirmer <- confirmation{Confirmation: <-publishConfirm}
 				}
 			}()
 
 			h.publishCh = make(chan *publishMessage)
 			go func() {
 				for pubMes := range h.publishCh {
-					publishConfirmers <- pubMes.confirm
-
-					pubCh.Publish(exchangeName, pubMes.eventName, false, false, amqp.Publishing{
+					err := pubCh.Publish(exchangeName, pubMes.eventName, false, false, amqp.Publishing{
 						Body: pubMes.message,
 					})
+					if err != nil {
+						pubMes.confirm <- confirmation{err: err}
+					} else {
+						publishConfirmers <- pubMes.confirm
+					}
 				}
 			}()
 
-			pubCh.Confirm(false)
+			h.publishChErr = pubCh.Confirm(false)
+			if h.publishChErr != nil {
+				return
+			}
 		}
 	}
 
@@ -233,8 +249,6 @@ func (h *Handler) startConsume() {
 
 		handler.isConnected = true
 	}
-
-	return
 }
 
 func (h *Handler) OnError(callback func(err error)) {
@@ -242,15 +256,11 @@ func (h *Handler) OnError(callback func(err error)) {
 }
 
 func (h *Handler) connect() (*amqp.Connection, error) {
-	//log.Printf("connecting")
-
 	if atomic.LoadUint32(&h.connectionExists) == 0 || h.connection == nil {
 		h.connectionMutex.Lock()
 		defer h.connectionMutex.Unlock()
 
 		if atomic.LoadUint32(&h.connectionExists) == 0 {
-			//log.Printf("connecting once")
-
 			h.connection, h.connectionErr = amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", h.userName, h.password, h.host, h.port),
 				amqp.Config{
 					Heartbeat: h.timeout / 2,
@@ -274,18 +284,21 @@ func (h *Handler) connect() (*amqp.Connection, error) {
 	return h.connection, h.connectionErr
 }
 
-func (h *Handler) closeConnection(lock bool) {
+func (h *Handler) closeConnection(lock bool) error {
 	if lock {
 		h.connectionMutex.Lock()
 		defer h.connectionMutex.Unlock()
 	}
 
+	var err error
 	if h.connection != nil {
-		h.connection.Close()
+		err = h.connection.Close()
 		h.connection = nil
 	}
 
 	h.connectionExists = 0
+
+	return err
 }
 
 func (h *Handler) createConsumeChannel(eventName string, options geb.OnEventOptions) (deliveries <-chan amqp.Delivery, err error) {
@@ -299,7 +312,10 @@ func (h *Handler) createConsumeChannel(eventName string, options geb.OnEventOpti
 		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
 	}
 
-	ch.Qos(options.MaxGoroutines, 0, false)
+	err = ch.Qos(options.MaxGoroutines+extraPrefetch, 0, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
+	}
 
 	queueName := fmt.Sprintf("%v/%v", h.consumerName, eventName)
 	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
@@ -329,10 +345,15 @@ func (h *Handler) createConsumeChannel(eventName string, options geb.OnEventOpti
 }
 
 func (h *Handler) handle(deliveries <-chan amqp.Delivery, handler *handler) {
-	//log.Printf("starting handling: %#v", deliveries)
+	// see: http://jmoiron.net/blog/limiting-concurrency-in-go/
+	sem := make(chan bool, handler.options.MaxGoroutines)
+
 	for d := range deliveries {
-		//log.Printf("delivery: %v", d)
+		// if sem is full, concurency limit is reached
+		sem <- true
 		go func(d amqp.Delivery) {
+			defer func() { <-sem }()
+
 			err := handler.callback(d.Body)
 
 			if err != nil {
@@ -342,11 +363,14 @@ func (h *Handler) handle(deliveries <-chan amqp.Delivery, handler *handler) {
 			}
 		}(d)
 	}
+
+	// once we can fill the whole sem here, it means all gorutines have finished
+	for i := 0; i < cap(sem); i++ {
+		sem <- true
+	}
 }
 
 func (h *Handler) Close() (err error) {
-	//log.Printf("closing")
-
 	atomic.StoreUint32(&h.isClosing, 1)
 	defer func() {
 		atomic.StoreUint32(&h.isClosing, 0)
@@ -358,16 +382,13 @@ func (h *Handler) Close() (err error) {
 	}
 	h.consumeChsMutex.Unlock()
 
-	h.closeConnection(true)
 	h.closePublishChannel(true)
+	err = h.closeConnection(true)
 
-	//log.Printf("closing end")
-	return
+	return err
 }
 
 func (h *Handler) Reconnect() {
-	//log.Printf("reconnecting")
-
 	h.startConsume()
 }
 
