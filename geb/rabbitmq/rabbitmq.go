@@ -144,7 +144,7 @@ func (h *Handler) initPublishChannel() error {
 	}
 
 	pendingPubMsgs := make(chan *publishMessage, maxPendingPublishes)
-	publishConfirm := pubCh.NotifyPublish(make(chan amqp.Confirmation))
+	publishConfirm := pubCh.NotifyPublish(make(chan amqp.Confirmation, maxPendingPublishes+1))
 	go func() {
 		for conf := range publishConfirm {
 			pubMsg := <-pendingPubMsgs

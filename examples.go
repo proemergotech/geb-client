@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -78,16 +79,20 @@ var (
 	publishErrCounts = make(map[string]*uint64, len(tests))
 	consumeCounts    = make(map[string]*uint64, len(tests))
 	midConsCounts    = make(map[string]*uint64, len(tests))
+	serverHost       string
+	serverPort       int
+	serverUser       string
+	serverPass       string
 )
 
 func simple() {
 	queue := geb.NewQueue(
 		rabbitmq.NewHandler(
-			"goTest",    // consumerName (application name)
-			"service",   // rabbitmq username
-			"service",   // rabbitmq password
-			"10.20.3.8", // rabbitmq host
-			5672,        // rabbitmq port
+			"goTest",   // consumerName (application name)
+			serverUser, // rabbitmq username
+			serverPass, // rabbitmq password
+			serverHost, // rabbitmq host
+			serverPort, // rabbitmq port
 			rabbitmq.Timeout(5*time.Second),
 		),
 		geb.JSONCodec(),
@@ -128,6 +133,12 @@ func simple() {
 }
 
 func main() {
+	flag.StringVar(&serverHost, "host", "10.20.3.8", "Geb server host")
+	flag.IntVar(&serverPort, "port", 5672, "Geb server port")
+	flag.StringVar(&serverUser, "user", "service", "Geb server user name")
+	flag.StringVar(&serverPass, "pass", "service", "Geb server password")
+	flag.Parse()
+
 	//simple()
 	//return
 
@@ -223,10 +234,10 @@ func createQueue() *geb.Queue {
 	q := geb.NewQueue(
 		rabbitmq.NewHandler(
 			"goTest",
-			"service",
-			"service",
-			"10.20.3.8",
-			5672,
+			serverUser,
+			serverPass,
+			serverHost,
+			serverPort,
 			rabbitmq.Timeout(5*time.Second),
 		),
 		geb.JSONCodec(),
