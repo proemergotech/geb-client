@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -73,18 +74,25 @@ var testBody = body{
 	},
 }
 
-var publishCounts = make(map[string]*uint64, len(tests))
-var consumeCounts = make(map[string]*uint64, len(tests))
-var midConsCounts = make(map[string]*uint64, len(tests))
+var (
+	publishCounts    = make(map[string]*uint64, len(tests))
+	publishErrCounts = make(map[string]*uint64, len(tests))
+	consumeCounts    = make(map[string]*uint64, len(tests))
+	midConsCounts    = make(map[string]*uint64, len(tests))
+	serverHost       string
+	serverPort       int
+	serverUser       string
+	serverPass       string
+)
 
 func simple() {
 	queue := geb.NewQueue(
 		rabbitmq.NewHandler(
-			"goTest",    // consumerName (application name)
-			"service",   // rabbitmq username
-			"service",   // rabbitmq password
-			"10.20.3.8", // rabbitmq host
-			5672,        // rabbitmq port
+			"goTest",   // consumerName (application name)
+			serverUser, // rabbitmq username
+			serverPass, // rabbitmq password
+			serverHost, // rabbitmq host
+			serverPort, // rabbitmq port
 			rabbitmq.Timeout(5*time.Second),
 		),
 		geb.JSONCodec(),
@@ -125,20 +133,41 @@ func simple() {
 }
 
 func main() {
+	flag.StringVar(&serverHost, "host", "10.20.3.8", "Geb server host")
+	flag.IntVar(&serverPort, "port", 5672, "Geb server port")
+	flag.StringVar(&serverUser, "user", "service", "Geb server user name")
+	flag.StringVar(&serverPass, "pass", "service", "Geb server password")
+	flag.Parse()
+
 	//simple()
 	//return
 
-	publishQ := createQueue()
-	defer publishQ.Close()
-
 	var wg sync.WaitGroup
 	start := make(chan bool)
+	done := make(chan bool)
 
 	for _, t := range tests {
 		consumeCounts[t.eventName] = new(uint64)
 		midConsCounts[t.eventName] = new(uint64)
 		publishCounts[t.eventName] = new(uint64)
+		publishErrCounts[t.eventName] = new(uint64)
 	}
+	defer func() {
+		wg.Wait()
+
+		pc, _ := json.Marshal(publishCounts)
+		pec, _ := json.Marshal(publishErrCounts)
+		cc, _ := json.Marshal(consumeCounts)
+		mc, _ := json.Marshal(midConsCounts)
+
+		log.Printf("publishCounts :%v\n", string(pc))
+		log.Printf("publishErrCounts :%v\n", string(pec))
+		log.Printf("consumeCounts :%v\n", string(cc))
+		log.Printf("midConsCounts :%v\n", string(mc))
+	}()
+
+	publishQ := createQueue()
+	defer publishQ.Close()
 
 	until := time.Now().Add(10 * time.Second)
 	for i := 0; i < 100; i++ {
@@ -148,6 +177,12 @@ func main() {
 			<-start
 			defer wg.Done()
 			for time.Now().Before(until) {
+				select {
+				case <-done:
+					return
+				default:
+				}
+
 				publish(q, t)
 			}
 		}(publishQ, t)
@@ -179,13 +214,12 @@ func main() {
 	close(start)
 
 	sigs := make(chan os.Signal, 1)
-	done := make(chan bool, 1)
 
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		<-sigs
-		done <- true
+		close(done)
 	}()
 
 	go func() {
@@ -194,28 +228,31 @@ func main() {
 	}()
 
 	<-done
-
-	pc, _ := json.Marshal(publishCounts)
-	cc, _ := json.Marshal(consumeCounts)
-	mc, _ := json.Marshal(midConsCounts)
-
-	log.Printf("publishCounts :%v\n", string(pc))
-	log.Printf("consumeCounts :%v\n", string(cc))
-	log.Printf("midConsCounts :%v\n", string(mc))
 }
 
 func createQueue() *geb.Queue {
-	return geb.NewQueue(
+	q := geb.NewQueue(
 		rabbitmq.NewHandler(
 			"goTest",
-			"service",
-			"service",
-			"10.20.3.8",
-			5672,
+			serverUser,
+			serverPass,
+			serverHost,
+			serverPort,
 			rabbitmq.Timeout(5*time.Second),
 		),
 		geb.JSONCodec(),
 	)
+
+	q.OnError(func(error error) {
+		log.Printf("connection error %+v\n", error)
+
+		go func() {
+			time.Sleep(2 * time.Second)
+			q.Reconnect()
+		}()
+	})
+
+	return q
 }
 
 func publish(queue *geb.Queue, t test) {
@@ -226,8 +263,11 @@ func publish(queue *geb.Queue, t test) {
 		Do()
 
 	if err != nil {
-		time.Sleep(1 * time.Second)
-		log.Printf("error: %v\n", err)
+		count := atomic.AddUint64(publishErrCounts[t.eventName], 1)
+		if count%1000 == 0 {
+			log.Printf("event: %v publish error %v times\n", t.eventName, count)
+		}
+		// log.Printf("event publish err: %+v", err)
 		return
 	}
 	count := atomic.AddUint64(publishCounts[t.eventName], 1)
@@ -238,15 +278,6 @@ func publish(queue *geb.Queue, t test) {
 }
 
 func consume(queue *geb.Queue, t test) {
-	queue.OnError(func(error error) {
-		log.Printf("connection error %+v\n", error)
-
-		go func() {
-			time.Sleep(2 * time.Second)
-			queue.Reconnect()
-		}()
-	})
-
 	queue.OnEvent(t.eventName, geb.MaxGoroutines(1000)).
 		Codec(t.codec).
 		Listen(func(event *geb.Event) error {

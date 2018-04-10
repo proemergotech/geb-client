@@ -1,5 +1,9 @@
 # Release Notes
 
+# 0.5.2 / 2018-04-10
+- fixed publish deadlock introduced by 0.5.1
+- improved concurrency handling (tested with --race flag)
+
 # 0.5.1 / 2018-04-03
 - error handling fixes
 - inline documentation
@@ -45,7 +49,7 @@
 
 ## 0.1.1 / 2017-08-18
 - fixed reconnect
-- fixed concurency issues
+- fixed concurrency issues
 
 ## 0.0.1 / 2017-08-07
 - project created
