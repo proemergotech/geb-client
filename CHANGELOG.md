@@ -1,5 +1,10 @@
 # Release Notes
 
+# 0.6.0 / 2018-09-14
+- removed support for multiple struct tags in codec (only 1 can be used now)
+- tag is now mandatory (no longer uses struct field name as fallback)
+- replaced json library
+
 # 0.5.2 / 2018-04-10
 - fixed publish deadlock introduced by 0.5.1
 - improved concurrency handling (tested with --race flag)
