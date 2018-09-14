@@ -1,8 +1,8 @@
 package geb
 
 import (
+	"github.com/json-iterator/go"
 	"github.com/pkg/errors"
-	ucodec "github.com/ugorji/go/codec"
 )
 
 // Codec is an interface for marshaling/unmarshaling event body and headers.
@@ -28,15 +28,15 @@ type codecEvent interface {
 	Marshal(v interface{}) error
 }
 
-type uCodec struct {
-	wrapperHandle ucodec.Handle
-	bodyHandle    ucodec.Handle
+type jsonCodec struct {
+	wrapperJSON jsoniter.API
+	bodyJSON    jsoniter.API
 }
 
-type uEvent struct {
-	handle     ucodec.Handle
-	Body       ucodec.Raw        `codec:"body"`
-	HeadersMap map[string]string `codec:"headers"`
+type jsonEvent struct {
+	json       jsoniter.API
+	Body       jsoniter.RawMessage `codec:"body"`
+	HeadersMap map[string]string   `codec:"headers"`
 }
 
 type rawCodec struct{}
@@ -46,32 +46,31 @@ type rawEvent []byte
 type CodecOption func(*codecSettings)
 
 type codecSettings struct {
-	tags []string
+	tag string
 }
 
 // JSONCodec returns a codec that marshals both headers and body into a json object.
 func JSONCodec(opts ...CodecOption) Codec {
 	gs := &codecSettings{
-		tags: []string{"json", "codec"},
+		tag: "json",
 	}
 	for _, opt := range opts {
 		opt(gs)
 	}
 
-	wrapHandle := &ucodec.JsonHandle{}
-	wrapHandle.TypeInfos = ucodec.NewTypeInfos([]string{"codec"})
-	wrapHandle.Raw = true
-	wrapHandle.MapKeyAsString = true
-	wrapHandle.HTMLCharsAsIs = true
-
-	bodyHandle := &ucodec.JsonHandle{}
-	bodyHandle.TypeInfos = ucodec.NewTypeInfos(gs.tags)
-	bodyHandle.MapKeyAsString = true
-	bodyHandle.HTMLCharsAsIs = true
-
-	return &uCodec{
-		wrapperHandle: wrapHandle,
-		bodyHandle:    bodyHandle,
+	return &jsonCodec{
+		wrapperJSON: jsoniter.Config{
+			EscapeHTML:             true,
+			SortMapKeys:            true,
+			TagKey:                 "codec",
+		}.Froze(),
+		bodyJSON: jsoniter.Config{
+			EscapeHTML:             true,
+			SortMapKeys:            true,
+			ValidateJsonRawMessage: true,
+			OnlyTaggedField:        true,
+			TagKey:                 gs.tag,
+		}.Froze(),
 	}
 }
 
@@ -80,31 +79,26 @@ func RawCodec() Codec {
 	return &rawCodec{}
 }
 
-// UseTags option can be used to change the default struct tags for marshaling/unmarshaling.
-// If more than one tag is specified, they will be used in order of declaration.
-// eg: If you specify both "json" and "codec" tags, and a struct field has both `json="my_field", codec="your_field"`,
-// than my_field will be used.
-func UseTags(tags ...string) CodecOption {
+// UseTag option can be used to change the struct tag used for marshaling/unmarshaling (default is json).
+func UseTag(tag string) CodecOption {
 	return func(gs *codecSettings) {
-		gs.tags = tags
+		gs.tag = tag
 	}
 }
 
-func (c *uCodec) Name() string {
-	return c.wrapperHandle.Name()
+func (c *jsonCodec) Name() string {
+	return "json"
 }
 
-func (c *uCodec) NewEvent() codecEvent {
-	return &uEvent{
-		handle:     c.bodyHandle,
+func (c *jsonCodec) NewEvent() codecEvent {
+	return &jsonEvent{
+		json:       c.bodyJSON,
 		HeadersMap: make(map[string]string),
 	}
 }
 
-func (c *uCodec) Encode(e codecEvent) ([]byte, error) {
-	b := []byte(nil)
-	enc := ucodec.NewEncoderBytes(&b, c.wrapperHandle)
-	err := enc.Encode(e)
+func (c *jsonCodec) Encode(e codecEvent) ([]byte, error) {
+	b, err := c.wrapperJSON.Marshal(e)
 	if err != nil {
 		return nil, errors.Wrapf(err, "geb.codec.Encode: %v", c.Name())
 	}
@@ -112,11 +106,10 @@ func (c *uCodec) Encode(e codecEvent) ([]byte, error) {
 	return b, nil
 }
 
-func (c *uCodec) Decode(data []byte) (codecEvent, error) {
+func (c *jsonCodec) Decode(data []byte) (codecEvent, error) {
 	e := c.NewEvent()
 
-	dec := ucodec.NewDecoderBytes(data, c.wrapperHandle)
-	err := dec.Decode(e)
+	err := c.wrapperJSON.Unmarshal(data, e)
 	if err != nil {
 		return nil, errors.Wrapf(err, "geb.codec.Decode: %v", c.Name())
 	}
@@ -124,35 +117,32 @@ func (c *uCodec) Decode(data []byte) (codecEvent, error) {
 	return e, nil
 }
 
-func (e *uEvent) SetHeaders(h map[string]string) {
+func (e *jsonEvent) SetHeaders(h map[string]string) {
 	e.HeadersMap = h
 }
 
-func (e *uEvent) Headers() map[string]string {
+func (e *jsonEvent) Headers() map[string]string {
 	return e.HeadersMap
 }
 
-func (e *uEvent) Marshal(v interface{}) error {
-	b := []byte(nil)
-	enc := ucodec.NewEncoderBytes(&b, e.handle)
-	err := enc.Encode(v)
+func (e *jsonEvent) Marshal(v interface{}) error {
+	b, err := e.json.Marshal(v)
 	if err != nil {
-		return errors.Wrapf(err, "geb.codec.Marshal: %v", e.handle.Name())
+		return errors.Wrapf(err, "geb.codec.Marshal: json")
 	}
 	e.Body = b
 
 	return nil
 }
 
-func (e *uEvent) Unmarshal(v interface{}) error {
+func (e *jsonEvent) Unmarshal(v interface{}) error {
 	if e.Body == nil {
-		return errors.Errorf("geb.codec.Unmarshal: %v: tried to unmarshal nil body", e.handle.Name())
+		return errors.Errorf("geb.codec.Unmarshal: json: tried to unmarshal nil body")
 	}
 
-	dec := ucodec.NewDecoderBytes(e.Body, e.handle)
-	err := dec.Decode(v)
+	err := e.json.Unmarshal(e.Body, v)
 	if err != nil {
-		return errors.Wrapf(err, "geb.codec.Unmarshal: %v", e.handle.Name())
+		return errors.Wrapf(err, "geb.codec.Unmarshal: json")
 	}
 
 	return nil

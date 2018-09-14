@@ -44,7 +44,7 @@ var tests = []test{
 		body: testBody,
 	},
 	{
-		codec:     geb.JSONCodec(geb.UseTags("custom")),
+		codec:     geb.JSONCodec(geb.UseTag("custom")),
 		eventName: "goTest/msgpack/v1",
 		headers: map[string]string{
 			"header": "value",
