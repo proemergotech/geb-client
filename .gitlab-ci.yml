@@ -1,0 +1,18 @@
+image: tmaier/docker-compose:latest
+services:
+  - docker:dind
+
+stages:
+  - test
+
+.common-scripts:
+- &gitlab-login
+    docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
+
+test:
+  stage: test
+  script:
+    # test the project
+    - *gitlab-login
+    - cd test
+    - docker-compose up --build --exit-code-from test test

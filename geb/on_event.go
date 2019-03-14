@@ -65,10 +65,10 @@ func (oe *OnEvent) Use(m Middleware) *OnEvent {
 
 // Listen starts the OnEvent subscription, using the configuration and middlewares stored in the OnEvent object.
 // All middlewares MUST be registered before calling Listen.
-func (oe *OnEvent) Listen(cb Callback) {
+func (oe *OnEvent) Listen(cb Callback) error {
 	oe.callback = cb
 
-	oe.q.handler.OnEvent(oe.eventName, func(payload []byte) error {
+	return oe.q.handler.OnEvent(oe.eventName, func(payload []byte) error {
 		ce, err := oe.codec.Decode(payload)
 
 		if err != nil {
