@@ -13,6 +13,8 @@ import (
 )
 
 const extraPrefetch = 20
+const exchangeName = "events"
+const maxPendingPublishes = 100
 
 type Handler struct {
 	consumerName string
@@ -20,40 +22,45 @@ type Handler struct {
 	password     string
 	host         string
 	port         int
+	timeout      time.Duration
 
-	connM   sync.Mutex
-	connErr error
-	conn    *amqp.Connection
+	conn   *connection
+	events *events
+	wg     *sync.WaitGroup
 
-	publishChM sync.RWMutex
-	publishCh  chan *publishMessage
+	subscribes map[string]*subscribe
+	onError    func(err error, reconnect func())
 
-	subscriberChsM sync.Mutex
-	subscribers    map[string]*subscriber
-
-	isClosing uint32
-	onError   func(err error)
-
-	timeout time.Duration
+	closed       *uint32
+	beforeStartM *sync.Mutex
+	started      bool
 }
 
-type subscriber struct {
-	consuming bool
-	callback  func([]byte) error
-	options   geb.OnEventOptions
-}
-
-type publishMessage struct {
-	eventName string
-	message   []byte
-	wg        sync.WaitGroup
-	err       error
+type events struct {
+	connect    chan struct{}
+	disconnect chan error
+	publish    chan *publish
 }
 
 type Option func(q *Handler)
 
-const exchangeName = "events"
-const maxPendingPublishes = 100
+type connection struct {
+	conn           *amqp.Connection
+	pubCh          *amqp.Channel
+	pendingPubMsgs chan *publish
+}
+
+type subscribe struct {
+	eventName string
+	callback  func([]byte) error
+	options   geb.OnEventOptions
+}
+
+type publish struct {
+	eventName string
+	payload   []byte
+	done      chan error
+}
 
 // NewHandler creates a rabbitmq based geb handler. Every eventName for OnEvent will result
 // in a separate rabbitmq queue. Registering multiple OnEvent callbacks for a single eventName is not supported.
@@ -64,21 +71,21 @@ func NewHandler(consumerName string, userName string, password string, host stri
 		password:     password,
 		host:         host,
 		port:         port,
+		timeout:      time.Second * 5,
 
-		connM:   sync.Mutex{},
-		connErr: nil,
-		conn:    nil,
+		events: &events{
+			connect:    make(chan struct{}),
+			disconnect: make(chan error),
+			publish:    make(chan *publish, 5),
+		},
+		wg: &sync.WaitGroup{},
 
-		publishChM: sync.RWMutex{},
-		publishCh:  nil,
+		subscribes: make(map[string]*subscribe),
 
-		subscriberChsM: sync.Mutex{},
-		subscribers:    make(map[string]*subscriber),
+		onError: func(err error, reconnect func()) {},
+		closed:  new(uint32),
 
-		isClosing: 0,
-		onError:   func(err error) {},
-
-		timeout: time.Second * 5,
+		beforeStartM: &sync.Mutex{},
 	}
 
 	for _, option := range options {
@@ -88,214 +95,258 @@ func NewHandler(consumerName string, userName string, password string, host stri
 	return h
 }
 
-func (h *Handler) Publish(eventName string, payload []byte) error {
-	err := h.initPublishChannel()
-	if err != nil {
-		return errors.Wrap(err, "Couldn't create publish channel")
-	}
+func (h *Handler) Start() {
+	h.beforeStartM.Lock()
+	h.started = true
+	h.beforeStartM.Unlock()
 
-	h.publishChM.RLock()
-	if h.publishCh == nil {
-		h.publishChM.RUnlock()
-		return errors.New("Connection closed while publishing")
-	}
+	h.wg.Add(1)
+	go h.loop()
 
-	pubMes := newPublishMessage(eventName, payload)
-
-	h.publishCh <- pubMes
-	h.publishChM.RUnlock()
-
-	err = pubMes.Wait()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	h.events.connect <- struct{}{}
 }
 
-func (h *Handler) initPublishChannel() error {
-	h.publishChM.RLock()
-	publishCh := h.publishCh
-	h.publishChM.RUnlock()
-
-	if publishCh != nil {
-		return nil
+func (h *Handler) OnEvent(eventName string, callback func([]byte) error, options geb.OnEventOptions) error {
+	h.beforeStartM.Lock()
+	defer h.beforeStartM.Unlock()
+	if h.started {
+		return errors.New("OnEvent handlers must be registered before calling Start")
 	}
 
-	h.publishChM.Lock()
-	defer h.publishChM.Unlock()
-
-	if h.publishCh != nil {
-		return nil
-	}
-
-	h.connM.Lock()
-	defer h.connM.Unlock()
-
-	err := h.connect()
-	if err != nil {
-		return err
-	}
-
-	var pubCh *amqp.Channel
-	pubCh, err = h.conn.Channel()
-	if err != nil {
-		return errors.Wrap(err, "Couldn't create publishMessage channel")
-	}
-
-	pendingPubMsgs := make(chan *publishMessage, maxPendingPublishes)
-	publishConfirm := pubCh.NotifyPublish(make(chan amqp.Confirmation, maxPendingPublishes+1))
-	go func() {
-		for conf := range publishConfirm {
-			pubMsg := <-pendingPubMsgs
-			if !conf.Ack {
-				pubMsg.Done(errors.New("Publish failed: ack false"))
-			} else {
-				pubMsg.Done(nil)
-			}
-		}
-		for pubMsg := range pendingPubMsgs {
-			pubMsg.Done(errors.New("Connection was closed during publishing"))
-		}
-	}()
-
-	publishCh = make(chan *publishMessage)
-	go func() {
-		for pubMsg := range publishCh {
-			err := pubCh.Publish(exchangeName, pubMsg.eventName, false, false, amqp.Publishing{
-				Body: pubMsg.message,
-			})
-			if err != nil {
-				pubMsg.Done(err)
-			} else {
-				pendingPubMsgs <- pubMsg
-			}
-		}
-		pubCh.Close()
-		close(pendingPubMsgs)
-	}()
-
-	err = pubCh.Confirm(false)
-	if err != nil {
-		close(publishCh)
-
-		return err
-	}
-
-	h.publishCh = publishCh
-
-	return nil
-}
-
-func (h *Handler) OnEvent(eventName string, callback func([]byte) error, options geb.OnEventOptions) {
-	h.subscriberChsM.Lock()
-	h.subscribers[eventName] = &subscriber{
-		consuming: false,
+	h.subscribes[eventName] = &subscribe{
+		eventName: eventName,
 		callback:  callback,
 		options:   options,
 	}
-	h.subscriberChsM.Unlock()
 
-	h.startConsume()
+	return nil
 }
 
-func (h *Handler) startConsume() {
-	h.subscriberChsM.Lock()
-	defer h.subscriberChsM.Unlock()
+func (h *Handler) OnError(cb func(err error, reconnect func())) error {
+	h.beforeStartM.Lock()
+	defer h.beforeStartM.Unlock()
+	if h.started {
+		return errors.New("OnError handler must be registered before calling Start")
+	}
 
-	for eventName, sub := range h.subscribers {
-		if sub.consuming {
-			continue
-		}
+	h.onError = cb
 
-		deliveries, err := h.createConsumeChannel(eventName, sub.options)
-		if err != nil {
-			return
-		}
+	return nil
+}
 
-		go sub.consume(deliveries)
+func (h *Handler) Publish(eventName string, payload []byte) error {
+	done := make(chan error, 1)
+	h.events.publish <- &publish{
+		eventName: eventName,
+		payload:   payload,
+		done:      done,
+	}
 
-		sub.consuming = true
+	return <-done
+}
+
+func (h *Handler) Reconnect() {
+	h.events.disconnect <- nil
+	h.events.connect <- struct{}{}
+}
+
+func (h *Handler) Close() error {
+	atomic.StoreUint32(h.closed, 1)
+	h.events.disconnect <- nil
+	h.wg.Wait()
+
+	return nil
+}
+
+func Timeout(duration time.Duration) Option {
+	return func(q *Handler) {
+		q.timeout = duration
 	}
 }
 
-func (h *Handler) OnError(callback func(err error)) {
-	h.onError = callback
+func (h *Handler) loop() {
+	defer h.wg.Done()
+	defer h.drain()
+	// h.closed can be set to true before disconnect is handled
+	defer h.disconnect()
+
+	var err error
+	for atomic.LoadUint32(h.closed) == 0 {
+		select {
+		case <-h.events.connect:
+			if h.conn != nil {
+				continue
+			}
+
+			err = h.connect()
+			if err != nil {
+				h.conn = nil
+				h.onError(err, h.Reconnect)
+				continue
+			}
+
+			for eventName, sub := range h.subscribes {
+				err = h.createConsumeChannel(eventName, sub)
+				if err != nil {
+					h.conn = nil
+					h.onError(err, h.Reconnect)
+					break
+				}
+			}
+
+		case err = <-h.events.disconnect:
+			h.disconnect()
+			if err != nil {
+				h.onError(err, h.Reconnect)
+			}
+
+		case pub := <-h.events.publish:
+			if h.conn == nil {
+				pub.done <- errors.New("publishing on closed amqp connnection")
+				continue
+			}
+
+			err = h.conn.pubCh.Publish(exchangeName, pub.eventName, false, false, amqp.Publishing{
+				Body: pub.payload,
+			})
+			if err != nil {
+				pub.done <- err
+				continue
+			}
+
+			select {
+			case h.conn.pendingPubMsgs <- pub:
+				// publish done will be called after ack
+
+			case err = <-h.events.disconnect:
+				h.disconnect()
+				if err != nil {
+					h.onError(err, h.Reconnect)
+					pub.done <- errors.Wrap(err, "connection closed during publish")
+				} else {
+					pub.done <- errors.New("connection closed during publish")
+				}
+			}
+		}
+	}
+}
+
+func (h *Handler) drain() {
+	go func() {
+		for range h.events.connect {
+		}
+	}()
+	go func() {
+		for range h.events.disconnect {
+		}
+	}()
+	go func() {
+		for p := range h.events.publish {
+			p.done <- errors.New("publish called after close")
+		}
+	}()
+}
+
+func (h *Handler) disconnect() {
+	if h.conn == nil {
+		return
+	}
+
+	h.conn.conn.Close()
+	close(h.conn.pendingPubMsgs)
+
+	h.conn = nil
 }
 
 func (h *Handler) connect() error {
-	if h.conn != nil {
-		return nil
-	}
-
-	if h.connErr != nil {
-		return h.connErr
-	}
-
-	h.conn, h.connErr = amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", h.userName, h.password, h.host, h.port),
+	conn, err := amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", h.userName, h.password, h.host, h.port),
 		amqp.Config{
 			Heartbeat: h.timeout / 2,
 			Locale:    "en_US",
 			Dial:      h.dial,
 		})
-	if h.connErr != nil {
-		h.connErr = errors.Wrap(h.connErr, "Couldn't connect to rabbitmq server")
-		h.onError(&amqp.Error{
-			Code:    -1,
-			Reason:  fmt.Sprintf("%v", h.connErr),
-			Server:  false,
-			Recover: true,
-		})
-
-		return h.connErr
+	if err != nil {
+		return errors.Wrap(err, "Couldn't connect to rabbitmq server")
 	}
 
 	closeCh := make(chan *amqp.Error)
-	h.conn.NotifyClose(closeCh)
-	h.handleClose(closeCh)
+	conn.NotifyClose(closeCh)
+	go h.handleAmqpClose(closeCh)
+
+	pubCh, err := conn.Channel()
+	if err != nil {
+		return errors.Wrap(err, "Couldn't create publishMessage channel")
+	}
+
+	publishConfirm := pubCh.NotifyPublish(make(chan amqp.Confirmation, maxPendingPublishes+1))
+	pendingPubMsgs := make(chan *publish, maxPendingPublishes)
+	go h.handlePublishResults(publishConfirm, pendingPubMsgs)
+
+	err = pubCh.Confirm(false)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	h.conn = &connection{
+		conn:           conn,
+		pubCh:          pubCh,
+		pendingPubMsgs: pendingPubMsgs,
+	}
 
 	return nil
 }
 
-func (h *Handler) createConsumeChannel(eventName string, options geb.OnEventOptions) (<-chan amqp.Delivery, error) {
-	h.connM.Lock()
-	defer h.connM.Unlock()
-
-	err := h.connect()
-	if err != nil {
-		return nil, err
+func (h *Handler) handleAmqpClose(closeCh chan *amqp.Error) {
+	aErr := <-closeCh
+	if aErr != nil {
+		h.events.disconnect <- aErr
 	}
+}
 
-	defer func() {
-		if err != nil {
-			h.onError(&amqp.Error{
-				Code:    -1,
-				Reason:  fmt.Sprintf("%v", err),
-				Server:  false,
-				Recover: true,
-			})
+func (h *Handler) handlePublishResults(publishConfirm chan amqp.Confirmation, pendingPubMsgs chan *publish) {
+	// publishConfirm is guaranteed to be in the same order as pendingPubMsgs,
+	// but either one might be sorter (closed sooner) than the other
+	for conf := range publishConfirm {
+		pubMsg, ok := <-pendingPubMsgs
+		if !ok {
+			// disconnect, there might be some publishes that could not be sent to pendingPublishes, but they were already returned an error
+			for range publishConfirm {
+				// drain the remaining confirms (this channel should be closed already by disconnect)
+			}
+			return
 		}
-	}()
 
-	ch, err := h.conn.Channel()
+		if !conf.Ack {
+			pubMsg.done <- errors.New("Publish failed: ack false")
+		} else {
+			pubMsg.done <- nil
+		}
+	}
+	for pubMsg := range pendingPubMsgs {
+		pubMsg.done <- errors.New("connection was closed during publishing")
+	}
+}
+
+func (h *Handler) createConsumeChannel(eventName string, sub *subscribe) error {
+	ch, err := h.conn.conn.Channel()
 	if err != nil {
-		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
+		return errors.Wrap(err, "couldn't create rabbitmq channel")
 	}
 
-	err = ch.Qos(options.MaxGoroutines+extraPrefetch, 0, false)
+	err = ch.Qos(sub.options.MaxGoroutines+extraPrefetch, 0, false)
 	if err != nil {
-		return nil, errors.Wrap(err, "Couldn't create rabbitmq channel")
+		return errors.Wrap(err, "couldn't create rabbitmq channel")
 	}
 
 	queueName := fmt.Sprintf("%v/%v", h.consumerName, eventName)
 	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "Couldn't create queue")
+		return errors.Wrap(err, "couldn't create queue")
 	}
 
 	err = ch.QueueBind(queueName, eventName, exchangeName, false, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "Couldn't bind queue")
+		return errors.Wrap(err, "couldn't bind queue")
 	}
 
 	deliveries, err := ch.Consume(
@@ -308,13 +359,31 @@ func (h *Handler) createConsumeChannel(eventName string, options geb.OnEventOpti
 		nil,
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "Couldn't start consuming")
+		return errors.Wrap(err, "couldn't start consuming")
 	}
 
-	return deliveries, nil
+	go sub.consume(deliveries)
+
+	return nil
 }
 
-func (s *subscriber) consume(deliveries <-chan amqp.Delivery) {
+func (h *Handler) dial(network, addr string) (net.Conn, error) {
+	conn, err := net.DialTimeout(network, addr, h.timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	// Heartbeating hasn't started yet, don't stall forever on a dead server.
+	// A deadline is set for TLS and AMQP handshaking. After AMQP is established,
+	// the deadline is cleared in openComplete.
+	if err := conn.SetDeadline(time.Now().Add(h.timeout)); err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+func (s *subscribe) consume(deliveries <-chan amqp.Delivery) {
 	// see: http://jmoiron.net/blog/limiting-concurrency-in-go/
 	sem := make(chan bool, s.options.MaxGoroutines)
 
@@ -338,105 +407,4 @@ func (s *subscriber) consume(deliveries <-chan amqp.Delivery) {
 	for i := 0; i < cap(sem); i++ {
 		sem <- true
 	}
-}
-
-func (h *Handler) Close() (err error) {
-	atomic.StoreUint32(&h.isClosing, 1)
-	defer func() {
-		atomic.StoreUint32(&h.isClosing, 0)
-	}()
-
-	h.subscriberChsM.Lock()
-	defer h.subscriberChsM.Unlock()
-
-	h.publishChM.Lock()
-	defer h.publishChM.Unlock()
-
-	h.connM.Lock()
-	defer h.connM.Unlock()
-
-	for _, sub := range h.subscribers {
-		sub.consuming = false
-	}
-
-	if h.publishCh != nil {
-		close(h.publishCh)
-		h.publishCh = nil
-	}
-
-	if h.conn != nil {
-		err = h.conn.Close()
-		h.conn = nil
-	}
-
-	return err
-}
-
-func (h *Handler) Reconnect() {
-	h.connM.Lock()
-	h.connErr = nil
-	h.connM.Unlock()
-
-	h.startConsume()
-}
-
-func (h *Handler) handleClose(errors <-chan *amqp.Error) {
-	go func() {
-		err := <-errors
-
-		if atomic.LoadUint32(&h.isClosing) != 1 {
-			h.Close()
-			if err != nil && h.onError != nil {
-				h.onError(err)
-			}
-		}
-
-		for range errors {
-		}
-	}()
-}
-
-func (h *Handler) dial(network, addr string) (net.Conn, error) {
-	conn, err := net.DialTimeout(network, addr, h.timeout)
-	if err != nil {
-		return nil, err
-	}
-
-	// Heartbeating hasn't started yet, don't stall forever on a dead server.
-	// A deadline is set for TLS and AMQP handshaking. After AMQP is established,
-	// the deadline is cleared in openComplete.
-	if err := conn.SetDeadline(time.Now().Add(h.timeout)); err != nil {
-		return nil, err
-	}
-
-	return conn, nil
-}
-
-func Timeout(duration time.Duration) Option {
-	return func(q *Handler) {
-		q.timeout = duration
-	}
-}
-
-func newPublishMessage(eventName string, payload []byte) *publishMessage {
-	pubMes := &publishMessage{
-		eventName: eventName,
-		message:   payload,
-		wg:        sync.WaitGroup{},
-		err:       nil,
-	}
-
-	pubMes.wg.Add(1)
-
-	return pubMes
-}
-
-func (pm *publishMessage) Done(err error) {
-	pm.err = err
-	pm.wg.Done()
-}
-
-func (pm *publishMessage) Wait() error {
-	pm.wg.Wait()
-	return pm.err
 }

@@ -27,9 +27,12 @@
 			5672,        // rabbitmq port
 			rabbitmq.Timeout(5*time.Second),
 		),
-		geb.MsgpackCodec(),
+		geb.JSONCodec(),
 	)
-
+	queue.OnError(func(err error) {
+		log.Printf("You broke it! %+v", errors.WithStack(err))
+	})
+	queue.Start()
 	defer queue.Close()
 
 	type dragon struct {
@@ -41,7 +44,7 @@
 			d := dragon{}
 			err := event.Unmarshal(&d)
 			if err != nil {
-				log.Printf("You broke it! %+v", err)
+				log.Printf("You broke it! %+v", errors.WithStack(err))
 				return nil
 			}
 
@@ -58,7 +61,7 @@
 		Do()
 
 	if err != nil {
-		log.Printf("You broke it! %+v", err)
+		log.Printf("You broke it! %+v", errors.WithStack(err))
 	}
 
 	time.Sleep(2 * time.Second)

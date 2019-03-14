@@ -1,0 +1,38 @@
+version: '3'
+
+services:
+  test:
+    build:
+      context: ../
+      dockerfile: test/Dockerfile
+#    volumes:
+#      - ../:/go/src/gitlab.com/proemergotech/geb-client-go
+    depends_on:
+      - geb_server
+    environment:
+      - GEB_USERNAME=service
+      - GEB_PASSWORD=service
+      - GEB_HOST=geb_server
+      - GEB_PORT=5672
+
+  geb_consul:
+    image: consul:latest
+
+  geb_server:
+    ports:
+      - 15672:15672
+    image: "registry.gitlab.com/proemergotech/geb-server:3.6.15"
+    depends_on:
+      - geb_consul
+    environment:
+      - RABBITMQ_ADMIN_USER=admin
+      - RABBITMQ_ADMIN_PASSWORD=admin
+      - RABBITMQ_SERVICE_USER=service
+      - RABBITMQ_SERVICE_PASSWORD=service
+      # master is included in the count (2 = 1 master + 1 mirror)
+      - RABBITMQ_MIRROR_COUNT=1
+      # need to be shared on all nodes for cluster formation
+      - RABBITMQ_ERLANG_COOKIE=testtest
+      - RABBITMQ_CONSUL_SCHEME=http
+      - RABBITMQ_CONSUL_HOST=geb_consul
+      - RABBITMQ_CONSUL_PORT=8500

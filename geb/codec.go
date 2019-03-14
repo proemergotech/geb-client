@@ -60,9 +60,9 @@ func JSONCodec(opts ...CodecOption) Codec {
 
 	return &jsonCodec{
 		wrapperJSON: jsoniter.Config{
-			EscapeHTML:             true,
-			SortMapKeys:            true,
-			TagKey:                 "codec",
+			EscapeHTML:  true,
+			SortMapKeys: true,
+			TagKey:      "codec",
 		}.Froze(),
 		bodyJSON: jsoniter.Config{
 			EscapeHTML:             true,

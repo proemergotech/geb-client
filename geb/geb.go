@@ -4,18 +4,18 @@ import "context"
 
 // Handler is an interface for the actual messaging implementation.
 type Handler interface {
+	// Start must be called after OnError, but before any Publish calls are made. OnEvent may be called either before or after Start.
+	Start()
 	// Close can be called to gracefully close the queue. No new events will be processed,
 	// but existing event processings will continue. Publishing on a closed handler will return with an error.
 	Close() error
 	// OnError callback is called when a non-event specific (not a marshaling/unmarshaling) error occurs.
 	// eg: connection error
-	OnError(callback func(err error))
+	OnError(cb func(err error, reconnect func())) error
 	// OnEvent for msgpack and json codecs, either 'codec' or 'json' tags may be used
-	OnEvent(eventName string, callback func(payload []byte) error, options OnEventOptions)
+	OnEvent(eventName string, callback func(payload []byte) error, options OnEventOptions) error
 	// Publish for msgpack and json codecs, either 'codec' or 'json' tags may be used
-	Publish(eventName string, payload []byte) (err error)
-	// Reconnect can be used to reconnect after a network error. Mostly should be used from OnError callback.
-	Reconnect()
+	Publish(eventName string, payload []byte) error
 }
 
 // Queue is the main struct for the geb client. You can publish/listen to multiple event types on a single queue.
@@ -33,21 +33,21 @@ func NewQueue(handler Handler, codec Codec) *Queue {
 	}
 }
 
+// Start must be called after OnError, but before any Publish calls are made. OnEvent may be called either before or after Start.
+func (q *Queue) Start() {
+	q.handler.Start()
+}
+
 // OnError callback is called when a non-event specific (not a marshaling/unmarshaling) error occurs.
 // eg: connection error
-func (q *Queue) OnError(callback func(err error)) {
-	q.handler.OnError(callback)
+func (q *Queue) OnError(callback func(err error, reconnect func())) error {
+	return q.handler.OnError(callback)
 }
 
 // Close can be called to gracefully close the queue. No new events will be processed,
 // but existing event processings will continue. Publishing on a closed queue will return with an error.
 func (q *Queue) Close() error {
 	return q.handler.Close()
-}
-
-// Reconnect can be used to reconnect after a network error. Mostly should be used from OnError callback.
-func (q *Queue) Reconnect() {
-	q.handler.Reconnect()
 }
 
 // UsePublish adds a middleware for all Publish calls. To add a middleware to a specific Publish only, call

@@ -1,5 +1,12 @@
 # Release Notes
 
+# 0.7.0 / 2019-03-14
+- added Start method which must be called manually (instead of implicitly calling it during Publish/OnEvent)
+- removed OnError/Restart methods from geb queue (can be used as option when creating handler)
+- publishing to a broken connection now returns with error instead of hanging, and no longer triggers OnError callback
+- refactored rabbitmq.go
+- added tests
+
 # 0.6.0 / 2018-09-14
 - removed support for multiple struct tags in codec (only 1 can be used now)
 - tag is now mandatory (no longer uses struct field name as fallback)

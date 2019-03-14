@@ -2,10 +2,7 @@
   "Vendor": true,
   "Exclude": [
     "should have comment",
-    "(S1013)"
-  ],
-  "Skip": [
-    "examples.go"
+    "comment on exported const"
   ],
   "Sort": ["path", "line"],
   "Deadline": "300s",
@@ -13,7 +10,7 @@
     "megacheck",
     "deadcode",
     "errcheck",
-    "gas",
+    "gosec",
     "goconst",
     "gofmt",
     "goimports",
