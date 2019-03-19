@@ -1,5 +1,8 @@
 # Release Notes
 
+# 0.7.1 / 2019-03-19
+- added a recovery middleware
+
 # 0.7.0 / 2019-03-14
 - added Start method which must be called manually (instead of implicitly calling it during Publish/OnEvent)
 - removed OnError/Restart methods from geb queue (can be used as option when creating handler)
