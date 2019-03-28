@@ -1,5 +1,8 @@
 # Release Notes
 
+# 0.7.2 / 2019-03-19
+- added panic reason to recovery middleware in case panic was not called with an error
+
 # 0.7.1 / 2019-03-19
 - added a recovery middleware
 
