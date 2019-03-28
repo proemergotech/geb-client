@@ -20,11 +20,11 @@ func (c Callback) wrapWith(m Middleware) Callback {
 func RecoveryMiddleware() Middleware {
 	return func(e *Event, next func(*Event) error) (err error) {
 		defer func() {
-			if panicErr := recover(); panicErr != nil {
-				if pErr, ok := panicErr.(error); ok {
+			if pArg := recover(); pArg != nil {
+				if pErr, ok := pArg.(error); ok {
 					err = errors.Wrap(pErr, "panic recovered in geb recovery middleware")
 				} else {
-					err = errors.New("panic recovered in geb recovery middleware")
+					err = errors.Errorf("panic recovered in geb recovery middleware: %v", pArg)
 				}
 			}
 		}()
