@@ -152,6 +152,13 @@ func (h *Handler) Reconnect() {
 
 func (h *Handler) Close() error {
 	atomic.StoreUint32(h.closed, 1)
+
+	h.beforeStartM.Lock()
+	defer h.beforeStartM.Unlock()
+	if !h.started {
+		return nil
+	}
+
 	h.events.disconnect <- nil
 	h.wg.Wait()
 

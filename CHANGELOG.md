@@ -1,5 +1,8 @@
 # Release Notes
 
+# 0.7.3 / 2019-06-24
+- fixed Handler.Close if called without calling Handler.Start first
+
 # 0.7.2 / 2019-03-19
 - added panic reason to recovery middleware in case panic was not called with an error
 
