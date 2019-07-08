@@ -4,7 +4,7 @@ import "context"
 
 // Handler is an interface for the actual messaging implementation.
 type Handler interface {
-	// Start must be called after OnError, but before any Publish calls are made. OnEvent may be called either before or after Start.
+	// Start must be called after OnError, but before any Publish/OnEvent calls are made.
 	Start()
 	// Close can be called to gracefully close the queue. No new events will be processed,
 	// but existing event processings will continue. Publishing on a closed handler will return with an error.
@@ -33,7 +33,7 @@ func NewQueue(handler Handler, codec Codec) *Queue {
 	}
 }
 
-// Start must be called after OnError, but before any Publish calls are made. OnEvent may be called either before or after Start.
+// Start must be called after OnError, but before any Publish/OnEvent calls are made.
 func (q *Queue) Start() {
 	q.handler.Start()
 }

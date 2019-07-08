@@ -32,7 +32,7 @@ type Handler struct {
 	onError    func(err error, reconnect func())
 
 	closed       *uint32
-	beforeStartM *sync.Mutex
+	beforeStartM *sync.RWMutex
 	started      bool
 }
 
@@ -85,7 +85,7 @@ func NewHandler(consumerName string, userName string, password string, host stri
 		onError: func(err error, reconnect func()) {},
 		closed:  new(uint32),
 
-		beforeStartM: &sync.Mutex{},
+		beforeStartM: &sync.RWMutex{},
 	}
 
 	for _, option := range options {
@@ -107,8 +107,8 @@ func (h *Handler) Start() {
 }
 
 func (h *Handler) OnEvent(eventName string, callback func([]byte) error, options geb.OnEventOptions) error {
-	h.beforeStartM.Lock()
-	defer h.beforeStartM.Unlock()
+	h.beforeStartM.RLock()
+	defer h.beforeStartM.RUnlock()
 	if h.started {
 		return errors.New("OnEvent handlers must be registered before calling Start")
 	}
@@ -123,8 +123,8 @@ func (h *Handler) OnEvent(eventName string, callback func([]byte) error, options
 }
 
 func (h *Handler) OnError(cb func(err error, reconnect func())) error {
-	h.beforeStartM.Lock()
-	defer h.beforeStartM.Unlock()
+	h.beforeStartM.RLock()
+	defer h.beforeStartM.RUnlock()
 	if h.started {
 		return errors.New("OnError handler must be registered before calling Start")
 	}
@@ -135,6 +135,13 @@ func (h *Handler) OnError(cb func(err error, reconnect func())) error {
 }
 
 func (h *Handler) Publish(eventName string, payload []byte) error {
+	h.beforeStartM.RLock()
+	defer h.beforeStartM.RUnlock()
+
+	if !h.started {
+		return errors.New("Publish must be called after Start")
+	}
+
 	done := make(chan error, 1)
 	h.events.publish <- &publish{
 		eventName: eventName,
@@ -153,8 +160,8 @@ func (h *Handler) Reconnect() {
 func (h *Handler) Close() error {
 	atomic.StoreUint32(h.closed, 1)
 
-	h.beforeStartM.Lock()
-	defer h.beforeStartM.Unlock()
+	h.beforeStartM.RLock()
+	defer h.beforeStartM.RUnlock()
 	if !h.started {
 		return nil
 	}
