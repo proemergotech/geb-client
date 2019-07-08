@@ -1,5 +1,8 @@
 # Release Notes
 
+# 0.7.4 / 2019-07-08
+- return error from Handler.Publish if called without calling Handler.Start first
+
 # 0.7.3 / 2019-06-24
 - fixed Handler.Close if called without calling Handler.Start first
 
