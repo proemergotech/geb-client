@@ -1,6 +1,9 @@
 package geb
 
-import "github.com/pkg/errors"
+import (
+	"github.com/pkg/errors"
+	"time"
+)
 
 // Callback is signature for the callback method passed to OnEvent.
 type Callback func(*Event) error
@@ -29,5 +32,26 @@ func RecoveryMiddleware() Middleware {
 			}
 		}()
 		return next(e)
+	}
+}
+
+func RetryMiddleware() Middleware {
+	return func(e *Event, next func(*Event) error) error {
+		err := next(e)
+		if err == nil {
+			return nil
+		}
+
+		backOff := NewExponentialBackOff(DefaultMaxElapsedTime, DefaultMaxInterval, DefaultRandomizationFactor)
+		for {
+			hasNext, duration := backOff.NextBackOff()
+			if !hasNext {
+				return errors.Wrap(err, "retry error")
+			}
+			time.Sleep(duration)
+			if err = next(e); err == nil {
+				return nil
+			}
+		}
 	}
 }
