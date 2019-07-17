@@ -50,3 +50,43 @@ func TestRecoveryMiddleware(t *testing.T) {
 		})
 	}
 }
+
+func TestRetryMiddleware(t *testing.T) {
+	var iteration = 0
+
+	testCases := map[string]struct {
+		next             func(*Event) error
+		wantedIterations int
+	}{
+		"error": {
+			next: func(*Event) error {
+				if iteration >= 5 {
+					return nil
+				}
+				iteration++
+				return errors.New("test")
+			},
+			wantedIterations: 5,
+		},
+		"happy": {
+			next: func(*Event) error {
+				iteration++
+				return nil
+			},
+			wantedIterations: 1,
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			iteration = 0
+
+			m := RetryMiddleware()
+			_ = m(&Event{}, testCase.next)
+
+			if iteration < testCase.wantedIterations {
+				t.Errorf("want: 5 runs, got: %d runs", iteration)
+			}
+		})
+	}
+}
