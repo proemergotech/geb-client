@@ -1,18 +1,24 @@
 # Release Notes
 
-# 0.7.4 / 2019-07-08
+# v0.7.6 / 2019-10-03
+- set default MaxGoroutines to 10
+
+# v0.7.5 / 2019-07-17
+- add retry middleware for Publish
+
+# v0.7.4 / 2019-07-08
 - return error from Handler.Publish if called without calling Handler.Start first
 
-# 0.7.3 / 2019-06-24
+# v0.7.3 / 2019-06-24
 - fixed Handler.Close if called without calling Handler.Start first
 
-# 0.7.2 / 2019-03-19
+# v0.7.2 / 2019-03-28
 - added panic reason to recovery middleware in case panic was not called with an error
 
-# 0.7.1 / 2019-03-19
+# v0.7.1 / 2019-03-19
 - added a recovery middleware
 
-# 0.7.0 / 2019-03-14
+# v0.7.0 / 2019-03-14
 - added Start method which must be called manually (instead of implicitly calling it during Publish/OnEvent)
 - removed OnError/Restart methods from geb queue (can be used as option when creating handler)
 - publishing to a broken connection now returns with error instead of hanging, and no longer triggers OnError callback

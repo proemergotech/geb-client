@@ -33,7 +33,7 @@ func (q *Queue) OnEvent(eventName string, options ...OnEventOption) *OnEvent {
 		q:         q,
 		codec:     q.codec,
 		eventName: eventName,
-		options:   OnEventOptions{MaxGoroutines: 1},
+		options:   OnEventOptions{MaxGoroutines: 10},
 	}
 
 	for _, option := range options {
