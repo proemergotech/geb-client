@@ -1,5 +1,8 @@
 # Release Notes
 
+# v0.8.0 / 2019-12-18                                                                                                                                                                          
+- go module update
+
 # v0.7.6 / 2019-10-03
 - set default MaxGoroutines to 10
 
