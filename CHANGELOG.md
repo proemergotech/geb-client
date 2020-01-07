@@ -1,6 +1,10 @@
 # Release Notes
 
-# v0.8.0 / 2019-12-18                                                                                                                                                                          
+## v1.0.0 / 2020-01-07
+- release version v1.0.0
+- add verify script and ci job
+
+# v0.8.0 / 2019-12-18
 - go module update
 
 # v0.7.6 / 2019-10-03

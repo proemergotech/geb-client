@@ -3,16 +3,24 @@ services:
   - docker:dind
 
 stages:
-  - test
+  - build
 
 .common-scripts:
 - &gitlab-login
     docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
 
 test:
-  stage: test
+  stage: build
   script:
     # test the project
     - *gitlab-login
     - cd test
     - docker-compose up --build --exit-code-from test test
+
+verify:
+  stage: build
+  script:
+    - apk update && apk add git
+    - ./verify.sh
+  except:
+    - master
