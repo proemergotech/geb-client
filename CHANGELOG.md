@@ -4,6 +4,7 @@
 - rewrite connection handling
 - reconnect automatically, do not need to call Reconnect function 
 - return error from Start method
+- release v2 module
 
 ## v1.0.1 / 2020-01-28
 - handle channel closing notifications and restart connection 
