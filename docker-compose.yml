@@ -1,7 +1,0 @@
-version: '3'
-
-services:
-  builder:
-    build: ./builder
-    volumes:
-      - ./:/go/src/gitlab.com/proemergotech/geb-client-go

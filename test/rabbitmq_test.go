@@ -50,30 +50,7 @@ func TestNoError(t *testing.T) {
 	}
 }
 
-func TestDelayedJoin(t *testing.T) {
-	p := NewProxy(serverHost, serverPort)
-	counts := NewCounter(expectedPublishCount)
-
-	go func() {
-		time.Sleep(1 * time.Second)
-		p.Start()
-	}()
-	test(t, p, counts)
-
-	if counts.PublishCount() == 0 {
-		t.Errorf("Expected some publish success, got none")
-	}
-
-	if counts.TriedPublishes() == counts.PublishCount() {
-		t.Errorf("Expected some publish errors, got none")
-	}
-
-	if counts.ConsumeCount() == 0 {
-		t.Errorf("Expected some consume success, got none")
-	}
-}
-
-func TestSeverRestart(t *testing.T) {
+func TestServerRestart(t *testing.T) {
 	p := NewProxy(serverHost, serverPort)
 	counts := NewCounter(expectedPublishCount)
 	var publishBeforeRestart int
@@ -133,9 +110,12 @@ func TestOnEventAfterStart(t *testing.T) {
 		geb.JSONCodec(),
 	)
 
-	q.Start()
+	err := q.Start()
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
 
-	err := q.OnEvent("", geb.MaxGoroutines(1000)).
+	err = q.OnEvent("", geb.MaxGoroutines(1000)).
 		Listen(func(event *geb.Event) error {
 			return nil
 		})
@@ -160,9 +140,12 @@ func TestOnErrorAfterStart(t *testing.T) {
 		geb.JSONCodec(),
 	)
 
-	q.Start()
+	err := q.Start()
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
 
-	err := q.OnError(func(err error, reconnect func()) {
+	err = q.OnError(func(err error) {
 	})
 	if err == nil {
 		t.Fatal("expected error when registering OnEvent callback after Start, got none")
@@ -183,10 +166,7 @@ func test(t *testing.T, p *Proxy, counts *Counter) {
 	}
 	defer func() {
 		for _, q := range queues {
-			err = q.Close()
-			if err != nil {
-				t.Error(errors.WithStack(err))
-			}
+			q.Close()
 		}
 	}()
 
@@ -251,11 +231,8 @@ func createQueue(eventName string, t *testing.T, p *Proxy, counts *Counter) *geb
 		geb.JSONCodec(),
 	)
 
-	err := q.OnError(func(err error, reconnect func()) {
-		go func() {
-			time.Sleep(2 * time.Second)
-			reconnect()
-		}()
+	err := q.OnError(func(err error) {
+		t.Log(err)
 	})
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -282,7 +259,10 @@ func createQueue(eventName string, t *testing.T, p *Proxy, counts *Counter) *geb
 		t.Fatalf("%+v", err)
 	}
 
-	q.Start()
+	err = q.Start()
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
 
 	return q
 }

@@ -1,5 +1,13 @@
 # Release Notes
 
+## v2.0.0 / 2020-02-05
+- rewrite connection handling
+- reconnect automatically, do not need to call Reconnect function 
+- return error from Start method
+
+## v1.0.1 / 2020-01-28
+- handle channel closing notifications and restart connection 
+
 ## v1.0.0 / 2020-01-07
 - release version v1.0.0
 - add verify script and ci job 

@@ -3,16 +3,13 @@
 ## Installation
 
 1. Use an ssh agent to allow git clone without any user input
-2. Add dependency to Gopkg.toml (see below)
-3. run dep ensure
+2. Add dependency to go.mod (see below)
+3. run go build
 
-### Gopkg.toml
+### go.mod
 
-```toml
-[[constraint]]
-  name = "gitlab.com/proemergotech/geb-client-go"
-  source = "git@gitlab.com:proemergotech/geb-client-go.git"
-  version = "0.1.6"
+```vgo
+    gitlab.com/proemergotech/geb-client-go v2.0.0
 ```
 
 ## Usage
@@ -32,7 +29,10 @@
 	queue.OnError(func(err error) {
 		log.Printf("You broke it! %+v", errors.WithStack(err))
 	})
-	queue.Start()
+	err := queue.Start()
+    if err != nil {
+        panic(err)    
+    }   
 	defer queue.Close()
 
 	type dragon struct {
