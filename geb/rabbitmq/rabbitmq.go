@@ -9,7 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
-	"gitlab.com/proemergotech/geb-client-go/geb"
+	"gitlab.com/proemergotech/geb-client-go/v2/geb"
 )
 
 const extraPrefetch = 20
