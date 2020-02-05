@@ -5,13 +5,13 @@ import "context"
 // Handler is an interface for the actual messaging implementation.
 type Handler interface {
 	// Start must be called after OnError, but before any Publish/OnEvent calls are made.
-	Start()
+	Start() error
 	// Close can be called to gracefully close the queue. No new events will be processed,
 	// but existing event processings will continue. Publishing on a closed handler will return with an error.
 	Close() error
 	// OnError callback is called when a non-event specific (not a marshaling/unmarshaling) error occurs.
 	// eg: connection error
-	OnError(cb func(err error, reconnect func())) error
+	OnError(cb func(err error)) error
 	// OnEvent for msgpack and json codecs, either 'codec' or 'json' tags may be used
 	OnEvent(eventName string, callback func(payload []byte) error, options OnEventOptions) error
 	// Publish for msgpack and json codecs, either 'codec' or 'json' tags may be used
@@ -34,13 +34,13 @@ func NewQueue(handler Handler, codec Codec) *Queue {
 }
 
 // Start must be called after OnError, but before any Publish/OnEvent calls are made.
-func (q *Queue) Start() {
-	q.handler.Start()
+func (q *Queue) Start() error {
+	return q.handler.Start()
 }
 
 // OnError callback is called when a non-event specific (not a marshaling/unmarshaling) error occurs.
 // eg: connection error
-func (q *Queue) OnError(callback func(err error, reconnect func())) error {
+func (q *Queue) OnError(callback func(err error)) error {
 	return q.handler.OnError(callback)
 }
 

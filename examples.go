@@ -35,7 +35,7 @@ func main() {
 		),
 		geb.JSONCodec(),
 	)
-	err := queue.OnError(func(err error, reconnect func()) {
+	err := queue.OnError(func(err error) {
 		log.Printf("You broke it! %+v", errors.WithStack(err))
 	})
 	if err != nil {
@@ -62,7 +62,10 @@ func main() {
 	if err != nil {
 		log.Panicf("You broke it! %+v", errors.WithStack(err))
 	}
-	queue.Start()
+	err = queue.Start()
+	if err != nil {
+		log.Panicf("You broke it! %+v", errors.WithStack(err))
+	}
 
 	d := dragon{
 		Color: "green",
