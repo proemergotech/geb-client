@@ -14,8 +14,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
-	"gitlab.com/proemergotech/geb-client-go/v2/geb"
-	"gitlab.com/proemergotech/geb-client-go/v2/geb/rabbitmq"
+	"github.com/proemergotech/geb-client/v2/geb"
+	"github.com/proemergotech/geb-client/v2/geb/rabbitmq"
 )
 
 type body struct {

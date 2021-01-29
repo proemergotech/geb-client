@@ -9,7 +9,7 @@
 ### go.mod
 
 ```vgo
-    gitlab.com/proemergotech/geb-client-go v2.0.0
+    github.com/proemergotech/geb-client v2.0.0
 ```
 
 ## Usage
