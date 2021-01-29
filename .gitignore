@@ -4,4 +4,4 @@
 bin
 .glide
 vendor
-geb-client-go
+geb-client

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/proemergotech/geb-client-go/v2/geb"
-	"github.com/proemergotech/geb-client-go/v2/geb/rabbitmq"
+	"github.com/proemergotech/geb-client/v2/geb"
+	"github.com/proemergotech/geb-client/v2/geb/rabbitmq"
 )
 
 func main() {
