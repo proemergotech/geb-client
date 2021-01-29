@@ -1,7 +1,7 @@
 FROM golang:1.13
 
 ENV PROJECT_NAME=geb-client-go
-ENV ROOT_PACKAGE=gitlab.com/proemergotech/$PROJECT_NAME
+ENV ROOT_PACKAGE=github.com/proemergotech/$PROJECT_NAME
 
 ADD . $GOPATH/src/$ROOT_PACKAGE
 WORKDIR $GOPATH/src/$ROOT_PACKAGE

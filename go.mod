@@ -1,4 +1,4 @@
-module gitlab.com/proemergotech/geb-client-go/v2
+module github.com/proemergotech/geb-client-go/v2
 
 go 1.13
 
