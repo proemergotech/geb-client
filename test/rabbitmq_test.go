@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/streadway/amqp"
+	"github.com/proemergotech/errors"
 	"github.com/proemergotech/geb-client/v2/geb"
 	"github.com/proemergotech/geb-client/v2/geb/rabbitmq"
+	"github.com/streadway/amqp"
 )
 
 type body struct {
@@ -42,7 +42,7 @@ func TestNoError(t *testing.T) {
 	p := NewProxy(serverHost, serverPort)
 	counts := NewCounter(expectedPublishCount)
 
-	p.Start()
+	_ = p.Start()
 	test(t, p, counts)
 
 	if counts.TriedPublishes() != counts.PublishCount() {
@@ -55,7 +55,7 @@ func TestServerRestart(t *testing.T) {
 	counts := NewCounter(expectedPublishCount)
 	var publishBeforeRestart int
 
-	p.Start()
+	_ = p.Start()
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -66,7 +66,7 @@ func TestServerRestart(t *testing.T) {
 		p.Stop()
 		time.Sleep(1 * time.Second)
 		publishBeforeRestart = counts.PublishCount()
-		p.Start()
+		_ = p.Start()
 	}()
 
 	test(t, p, counts)
@@ -96,7 +96,7 @@ func TestServerRestart(t *testing.T) {
 
 func TestOnEventAfterStart(t *testing.T) {
 	p := NewProxy(serverHost, serverPort)
-	p.Start()
+	_ = p.Start()
 
 	q := geb.NewQueue(
 		rabbitmq.NewHandler(
@@ -126,7 +126,7 @@ func TestOnEventAfterStart(t *testing.T) {
 
 func TestOnErrorAfterStart(t *testing.T) {
 	p := NewProxy(serverHost, serverPort)
-	p.Start()
+	_ = p.Start()
 
 	q := geb.NewQueue(
 		rabbitmq.NewHandler(
@@ -191,9 +191,9 @@ func test(t *testing.T, p *Proxy, counts *Counter) {
 				}
 
 				avgSleep := float64(3 * time.Second / time.Duration(publishCountPerRoutine))
-				time.Sleep(time.Duration(math.Floor(avgSleep * 2 * rand.Float64())))
+				time.Sleep(time.Duration(math.Floor(avgSleep * 2 * rand.Float64()))) //nolint:gosec
 			}
-		}(queues[rand.Intn(len(queues))])
+		}(queues[rand.Intn(len(queues))]) //nolint:gosec
 	}
 	close(start)
 
@@ -241,7 +241,7 @@ func createQueue(eventName string, t *testing.T, p *Proxy, counts *Counter) *geb
 	err = q.OnEvent(eventName, geb.MaxGoroutines(1000)).
 		Listen(func(event *geb.Event) error {
 			b := &body{}
-			event.Unmarshal(b)
+			_ = event.Unmarshal(b)
 
 			if !reflect.DeepEqual(testHeaders, event.Headers()) {
 				t.Errorf("headers mismatch, expected: %v, got: %v", testHeaders, event.Headers())

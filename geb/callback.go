@@ -3,7 +3,7 @@ package geb
 import (
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/proemergotech/errors"
 )
 
 // Callback is signature for the callback method passed to OnEvent.

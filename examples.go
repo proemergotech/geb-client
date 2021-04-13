@@ -5,7 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/proemergotech/errors"
+
 	"github.com/proemergotech/geb-client/v2/geb"
 	"github.com/proemergotech/geb-client/v2/geb/rabbitmq"
 )
