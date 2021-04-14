@@ -14,7 +14,7 @@ func TestMaxElapsedTime(t *testing.T) {
 		hasNext, duration := b.NextBackOff()
 		if !hasNext {
 			if !time.Now().After(startTime.Add(maxElapsedTime)) {
-				t.Errorf("wanted elapsed time to be greater than: %s; got: %s", maxElapsedTime.String(), time.Now().Sub(startTime).String())
+				t.Errorf("wanted elapsed time to be greater than: %s; got: %s", maxElapsedTime.String(), time.Since(startTime).String())
 			}
 			break
 		}

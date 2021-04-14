@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/streadway/amqp"
+	"github.com/proemergotech/errors"
 	"github.com/proemergotech/geb-client/v2/geb"
+	"github.com/streadway/amqp"
 )
 
 const extraPrefetch = 20
@@ -377,7 +377,7 @@ func (h *Handler) createConsumeChannel(eventName string, consumerName string, su
 	}
 
 	queueName := fmt.Sprintf("%v/%v", consumerName, eventName)
-	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
+	_, err = ch.QueueDeclare(queueName, true, false, false, false, amqp.Table{"x-queue-type": "quorum"})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "couldn't create queue")
 	}

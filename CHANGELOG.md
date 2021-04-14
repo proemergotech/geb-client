@@ -1,5 +1,9 @@
 # Release Notes
 
+## v2.1.0 / 2021-04-12
+- use quorum queues
+- update libs
+
 ## v2.0.0 / 2020-02-05
 - rewrite connection handling
 - reconnect automatically, do not need to call Reconnect function 

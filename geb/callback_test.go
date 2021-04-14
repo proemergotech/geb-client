@@ -3,7 +3,7 @@ package geb
 import (
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/proemergotech/errors"
 )
 
 func TestRecoveryMiddleware(t *testing.T) {
@@ -30,6 +30,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 			wantErr: nil,
 		},
 	} {
+		data := data
 		t.Run(name, func(t *testing.T) {
 			m := RecoveryMiddleware()
 
@@ -78,6 +79,7 @@ func TestRetryMiddleware(t *testing.T) {
 	}
 
 	for name, testCase := range testCases {
+		testCase := testCase
 		t.Run(name, func(t *testing.T) {
 			iteration = 0
 

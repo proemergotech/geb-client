@@ -42,5 +42,5 @@ func (b *ExponentialBackoff) NextBackOff() (bool, time.Duration) {
 	} else {
 		b.currentInterval = time.Duration(floatInterval * multiplier)
 	}
-	return true, time.Duration(floatInterval * (1 + rand.Float64()*b.randomizationFactor))
+	return true, time.Duration(floatInterval * (1 + rand.Float64()*b.randomizationFactor)) //nolint:gosec
 }
