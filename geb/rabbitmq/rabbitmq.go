@@ -23,6 +23,7 @@ type Handler struct {
 	host         string
 	port         int
 	timeout      time.Duration
+	vhost        string
 
 	connection       *amqp.Connection
 	connectionMu     *sync.RWMutex
@@ -66,6 +67,12 @@ type Option func(q *Handler)
 func Timeout(duration time.Duration) Option {
 	return func(q *Handler) {
 		q.timeout = duration
+	}
+}
+
+func VHost(vhost string) Option {
+	return func(q *Handler) {
+		q.vhost = vhost
 	}
 }
 
@@ -319,7 +326,7 @@ func (h *Handler) disconnect() {
 }
 
 func (h *Handler) createConnection() error {
-	conn, err := amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/", h.username, h.password, h.host, h.port),
+	conn, err := amqp.DialConfig(fmt.Sprintf("amqp://%v:%v@%v:%v/%v", h.username, h.password, h.host, h.port, h.vhost),
 		amqp.Config{
 			Heartbeat: h.timeout / 2,
 			Locale:    "en_US",

@@ -43,11 +43,24 @@ func TestNoError(t *testing.T) {
 	counts := NewCounter(expectedPublishCount)
 
 	_ = p.Start()
-	test(t, p, counts)
+	test(t, p, counts, "")
 
 	if counts.TriedPublishes() != counts.PublishCount() {
 		t.Errorf("Expected no publish errors, got: %v", counts.TriedPublishes()-counts.PublishCount())
 	}
+}
+
+func TestVhost(t *testing.T) {
+	p := NewProxy(serverHost, serverPort)
+	counts := NewCounter(expectedPublishCount)
+
+	_ = p.Start()
+	test(t, p, counts, "testvhost")
+
+	if counts.TriedPublishes() != counts.PublishCount() {
+		t.Errorf("Expected no publish errors, got: %v", counts.TriedPublishes()-counts.PublishCount())
+	}
+
 }
 
 func TestServerRestart(t *testing.T) {
@@ -69,7 +82,7 @@ func TestServerRestart(t *testing.T) {
 		_ = p.Start()
 	}()
 
-	test(t, p, counts)
+	test(t, p, counts, "")
 
 	wg.Wait()
 
@@ -152,7 +165,7 @@ func TestOnErrorAfterStart(t *testing.T) {
 	}
 }
 
-func test(t *testing.T, p *Proxy, counts *Counter) {
+func test(t *testing.T, p *Proxy, counts *Counter, vhost string) {
 	eventName := "event/goTest/test/" + t.Name() + "/v1"
 	queueName := serviceName + "/" + eventName
 	err := deleteQueue(queueName)
@@ -162,11 +175,11 @@ func test(t *testing.T, p *Proxy, counts *Counter) {
 
 	queues := make([]*geb.Queue, 0, queueCount)
 	for i := 0; i < queueCount; i++ {
-		queues = append(queues, createQueue(eventName, t, p, counts))
+		queues = append(queues, createQueue(vhost, eventName, t, p, counts))
 	}
 	defer func() {
 		for _, q := range queues {
-			q.Close()
+			_ = q.Close()
 		}
 	}()
 
@@ -218,7 +231,12 @@ func test(t *testing.T, p *Proxy, counts *Counter) {
 	t.Log(counts.String())
 }
 
-func createQueue(eventName string, t *testing.T, p *Proxy, counts *Counter) *geb.Queue {
+func createQueue(vhost string, eventName string, t *testing.T, p *Proxy, counts *Counter) *geb.Queue {
+	opts := []rabbitmq.Option{rabbitmq.Timeout(5 * time.Second)}
+	if vhost != "" {
+		opts = append(opts, rabbitmq.VHost(vhost))
+	}
+
 	q := geb.NewQueue(
 		rabbitmq.NewHandler(
 			serviceName,
@@ -226,7 +244,7 @@ func createQueue(eventName string, t *testing.T, p *Proxy, counts *Counter) *geb
 			serverPass,
 			p.Host(),
 			p.Port(),
-			rabbitmq.Timeout(5*time.Second),
+			opts...,
 		),
 		geb.JSONCodec(),
 	)
