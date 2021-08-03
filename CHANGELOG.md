@@ -1,5 +1,8 @@
 # Release Notes
 
+## v2.2.0 / 2021-07-30
+- added option to specify rabbitmq vhost
+
 ## v2.1.0 / 2021-04-12
 - use quorum queues
 - update libs

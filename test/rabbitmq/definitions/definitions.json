@@ -24,6 +24,9 @@
   "vhosts": [
     {
       "name": "/"
+    },
+    {
+      "name": "testvhost"
     }
   ],
   "permissions": [
@@ -37,6 +40,13 @@
     {
       "user": "service",
       "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "service",
+      "vhost": "testvhost",
       "configure": ".*",
       "write": ".*",
       "read": ".*"
@@ -61,6 +71,24 @@
       "auto_delete": false,
       "internal": false,
       "arguments": {}
+    },
+    {
+      "name": "events",
+      "vhost": "testvhost",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "dead_letter",
+      "vhost": "testvhost",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
     }
   ],
   "policies": [
@@ -76,6 +104,19 @@
         "ha-sync-mode":"automatic"
       },
       "priority": 0
+    },
+    {
+      "vhost": "testvhost",
+      "name": "all_queues",
+      "pattern": ".*",
+      "apply-to": "queues",
+      "definition": {
+        "dead-letter-exchange": "dead_letter",
+        "ha-mode": "exactly",
+        "ha-params": 2,
+        "ha-sync-mode":"automatic"
+      },
+      "priority": 0
     }
   ]
-} 
+}
