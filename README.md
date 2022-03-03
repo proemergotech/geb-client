@@ -11,7 +11,7 @@
 ### go.mod
 
 ```vgo
-    github.com/proemergotech/geb-client v2.0.0
+    github.com/proemergotech/geb-client/v2 v2.2.0
 ```
 
 ## Usage
