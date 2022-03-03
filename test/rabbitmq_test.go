@@ -12,10 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/proemergotech/errors"
+	"github.com/proemergotech/errors/v2"
+	"github.com/streadway/amqp"
+
 	"github.com/proemergotech/geb-client/v2/geb"
 	"github.com/proemergotech/geb-client/v2/geb/rabbitmq"
-	"github.com/streadway/amqp"
 )
 
 type body struct {

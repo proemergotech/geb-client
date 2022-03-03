@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/proemergotech/errors"
+	"github.com/proemergotech/errors/v2"
 )
 
 type Proxy struct {

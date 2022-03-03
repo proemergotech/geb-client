@@ -1,5 +1,9 @@
 # Release Notes
 
+## v2.3.0 / 2022-03-03
+- update errors lib
+- fix error handling in `proxyClose`
+
 ## v2.2.0 / 2021-07-30
 - added option to specify rabbitmq vhost
 
