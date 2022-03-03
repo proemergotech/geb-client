@@ -3,7 +3,7 @@ package geb
 import (
 	"testing"
 
-	"github.com/proemergotech/errors"
+	"github.com/proemergotech/errors/v2"
 )
 
 func TestRecoveryMiddleware(t *testing.T) {

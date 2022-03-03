@@ -10,8 +10,8 @@ github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742 h1:Esafd1046DLD
 github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/proemergotech/errors v1.1.0 h1:dFSxfnSfjgLdMeHeGYbRiQTDXgXEuZZUZakmL7pmjaE=
-github.com/proemergotech/errors v1.1.0/go.mod h1:QLxLYkNz9iBsxtpvd7Xf0oT+rrp914VEqJx7pShbHgA=
+github.com/proemergotech/errors/v2 v2.0.0 h1:wNHZOMnDV95Su5jseNlopKv5kxv2f41frl3enghl/jo=
+github.com/proemergotech/errors/v2 v2.0.0/go.mod h1:gCeVJJcI1aU2BiaN/N99Fmd6CDsIRXMGOht80M3cWEg=
 github.com/streadway/amqp v1.0.0 h1:kuuDrUJFZL1QYL9hUNuCxNObNzB0bV/ZG5jV3RWAQgo=
 github.com/streadway/amqp v1.0.0/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

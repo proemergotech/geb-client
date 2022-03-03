@@ -2,7 +2,7 @@ package geb
 
 import (
 	jsoniter "github.com/json-iterator/go"
-	"github.com/proemergotech/errors"
+	"github.com/proemergotech/errors/v2"
 )
 
 // Codec is an interface for marshaling/unmarshaling event body and headers.

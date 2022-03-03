@@ -20,14 +20,14 @@ linters:
   enable:
     - deadcode
     - errcheck
+    - exportloopref
     - goconst
     - goimports
-    - golint
+    - revive
     - gosec
     - govet
     - ineffassign
     - prealloc
-    - scopelint
     - staticcheck
     - structcheck
     - typecheck

@@ -7,9 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/proemergotech/errors"
-	"github.com/proemergotech/geb-client/v2/geb"
+	"github.com/proemergotech/errors/v2"
 	"github.com/streadway/amqp"
+
+	"github.com/proemergotech/geb-client/v2/geb"
 )
 
 const extraPrefetch = 20
@@ -418,9 +419,9 @@ func (h *Handler) proxyClose(source string, closeCh chan *amqp.Error) {
 	var err error
 
 	select {
-	case err = <-closeCh:
-		if err != nil {
-			err = errors.WithMessage(err, "closing "+source)
+	case chErr := <-closeCh:
+		if chErr != nil {
+			err = errors.WithMessage(chErr, "closing "+source)
 		} else {
 			err = errors.New("closing " + source)
 		}

@@ -1,3 +1,5 @@
+[![Go Reference](https://pkg.go.dev/badge/github.com/proemergotech/geb-client/v2.svg)](https://pkg.go.dev/github.com/proemergotech/geb-client/v2)
+
 # Geb Client in Go
 
 ## Installation
@@ -9,7 +11,7 @@
 ### go.mod
 
 ```vgo
-    github.com/proemergotech/geb-client v2.0.0
+    github.com/proemergotech/geb-client/v2 v2.2.0
 ```
 
 ## Usage
