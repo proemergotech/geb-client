@@ -1,4 +1,4 @@
-[![Go Reference](https://pkg.go.dev/badge/github.com/proemergotech/errors/v2.svg)](https://pkg.go.dev/github.com/proemergotech/errors/v2)
+[![Go Reference](https://pkg.go.dev/badge/github.com/proemergotech/geb-client/v2.svg)](https://pkg.go.dev/github.com/proemergotech/geb-client/v2)
 
 # Geb Client in Go
 
